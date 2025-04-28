@@ -1,5 +1,49 @@
+<<<<<<< HEAD
 .pio
 .vscode/.browse.c_cpp.db*
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+# PlatformIO specific
+.pio/
+.vscode/
+
+# PlatformIO build files
+*.elf
+*.bin
+*.hex
+*.map
+*.d
+*.o
+
+# PlatformIO environment files
+*.env
+
+# IDE specific (optional)
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Backup files
+*~
+*.bak
+*.tmp
+
+# Teensy Loader (Teensyduino) files
+*.eeprom
+
+# Node modules (if using JS tools)
+node_modules/
+
+# Python (if you use scripting in PIO)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
