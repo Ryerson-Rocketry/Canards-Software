@@ -35,16 +35,12 @@ project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Enable hardware floating point 
-set(FPU_FLAGS "-mfloat-abi=hard -mfpu=fpv4-sp-d16")
+set(FPU_FLAGS -mfloat-abi=hard -mfpu=fpv4-sp-d16)
 add_compile_options(${FPU_FLAGS})
 add_link_options(${FPU_FLAGS})
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
-
-# Add DSP as a static library
-file(GLOB CMSIS_DSP_SRCS "${CMAKE_SOURCE_DIR}/Drivers/CMSIS/DSP/Source/**/*.c")
-add_library(CMSISDSP STATIC ${CMSIS_DSP_SRCS})
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -62,8 +58,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-    ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/DSP/Include
-
 )
 
 # Add project symbols (macros)
@@ -74,7 +68,6 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     PRIVATE
-        CMSISDSP
         stm32cubemx
 
     # Add user defined libraries
