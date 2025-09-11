@@ -34,6 +34,11 @@ enable_language(C ASM)
 project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
+# Enable hardware floating point 
+set(FPU_FLAGS -mfloat-abi=hard -mfpu=fpv4-sp-d16)
+add_compile_options(${FPU_FLAGS})
+add_link_options(${FPU_FLAGS})
+
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
@@ -62,7 +67,8 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
-    stm32cubemx
+    PRIVATE
+        stm32cubemx
 
     # Add user defined libraries
 )
