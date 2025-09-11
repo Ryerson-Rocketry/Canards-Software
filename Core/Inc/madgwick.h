@@ -280,3 +280,34 @@ void getCompensatedGyroMeas(float accel[4], float gyroBias[4], float out[4])
         out[i] = accel[i] - gyroBias[i];
     }
 }
+
+struct madgwick
+{
+    // input data, sensor frames
+    float mag_sensor[4];
+    float accel_sensor[4];
+    float gyro_sensor[4];
+
+    // variables that can be tuned
+    float beta;
+    float integralGain; // zeta
+
+    // bias
+    float gyroBias[3];
+
+    // time step
+    float dt;
+
+    // quaternians
+    float orientation[4];
+    float direcErrorQuat[4];
+    float quatDeriv[4];
+    float gradidentQuat[4];
+
+    // Earth frames
+    float gravity[4];
+    float earthMagField[4];
+
+    // output of Euler angles
+    float euler[3];
+};
