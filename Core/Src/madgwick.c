@@ -2,10 +2,9 @@
 #include "math.h"
 
 /*
- *  Perform the Quaternian Conjugate formula
- *  param: float q[4], input quaternian
- *  param: float out[4], array to hold quaternian conjugate
- *  return: array that holds the conjugate of the input
+ *  Perform the Quaternion Conjugate formula
+ *  @param: float q[4], input quaternion
+ *  @param: float out[4], array to hold quaternion conjugate
  */
 void quatConjugate(float q[4], float out[4])
 {
@@ -16,6 +15,11 @@ void quatConjugate(float q[4], float out[4])
     }
 }
 
+/*
+ *  Normalize the quaternion
+ *  @param: float q[4], input quaternion
+ *  @param: float out[4], normalized quaternion
+ */
 void normalizeQuat(float q[4], float out[4])
 {
     float norm = sqrtf(powf(q[0], 2) + powf(q[1], 2) + powf(q[2], 2) + powf(q[3], 2));
@@ -26,11 +30,11 @@ void normalizeQuat(float q[4], float out[4])
 }
 
 /*
- *  Perform Quaternian Product between two Quaternians
- *  param: float a [4], quaternian one
- *  param: float b [4], quaternian two
- *  param: float out [3], output array
- *  return: (1x4 Matrix) quaternian but the matrix is transposed
+ *  Perform Quaternion Product between two Quaternians
+ *  @param: float a [4], quaternion one
+ *  @param: float b [4], quaternion two
+ *  @param: float out [3], output array
+ *
  */
 void quatProduct(float a[4], float b[4], float out[4])
 {
@@ -42,10 +46,10 @@ void quatProduct(float a[4], float b[4], float out[4])
 }
 
 /*
- *  Convert Quaternian to Euler Angles
- *  param: float q [4], quaternian
- *  param: float out [3], output array
- *  return: [yaw, pitch, roll]
+ *  Convert Quaternion to Euler Angles
+ *  @param: float q [4], quaternion
+ *  @param: float out [3], output array
+ *  returns: [yaw, pitch, roll]
  */
 void quat2EulerAng(float q[4], float out[3])
 {
@@ -54,6 +58,12 @@ void quat2EulerAng(float q[4], float out[3])
     out[2] = atan2f(2 * q[2] * q[3] - 2 * q[0] * q[1], 2 * q[0] * q[0] + 2 * q[3] * q[3] - 1);
 }
 
+/*
+ *  Scalar multiplication of a quaternion
+ *  @param: float q[4], input quaternion
+ *  @param: scalar, scalar you want to multiply with
+ *  @param: float out[4], array to hold quaternion conjugate
+ */
 void scalarMulQuat(float q[4], float scalar, float out[4])
 {
     for (int i = 0; i < 4; i++)
@@ -62,6 +72,12 @@ void scalarMulQuat(float q[4], float scalar, float out[4])
     }
 }
 
+/*
+ *  Perform the Quaternion Conjugate formula
+ *  @param: float q[4], input quaternion
+ *  @param: float out[4], array to hold quaternion conjugate
+ *
+ */
 void calcAccelQuatDeriv(float accel[4], float q[4], float out[4])
 {
     float temp[4];
@@ -69,6 +85,14 @@ void calcAccelQuatDeriv(float accel[4], float q[4], float out[4])
     quatProduct(temp, accel, out);
 }
 
+/*
+ * Calcuulate the quaternion dervied from accelerometer
+ * @param: float q [4], estimated orientation
+ * @param: float  accelQuatDeriv[4], the quaternion derivative of the accel quaternion
+ * @param: float samplingTime, time elapsed from prev operation
+ * @param: float out[4], output array to hold the acceleration quaternion
+ *
+ */
 void calcAccelQuat(float q[4], float accelQuatDeriv[4], float samplingTime, float out[4])
 {
     float temp[4];
@@ -80,6 +104,14 @@ void calcAccelQuat(float q[4], float accelQuatDeriv[4], float samplingTime, floa
     }
 }
 
+/**
+ * Calculaate the normalized vector of Earth's magnetic inclincation
+ * @param: float q[4], input quaternion
+ * @param: float  mag [4], magnetometer values
+ * @param: float quatDeriv[4], the quaternion derivative of the estimated orientation
+ * @param: calculates Earth's magnetic field relative to Magnetometer (I think)
+ *
+ */
 void computeReferenceMag2EarthFrame(float q[4], float mag[4], float quatDeriv[4], float out[4])
 {
     float temp[4];
@@ -94,6 +126,14 @@ void computeReferenceMag2EarthFrame(float q[4], float mag[4], float quatDeriv[4]
     out[2] = 0;
 }
 
+/**
+ *  Calculates the objective function of the magnetometer data
+ *  @param: float earthMagInc[4], the Earth's magnetic inclination in form of a quaternion
+ *  @param: float  mag [4], magnetometer data
+ *  @param: float q[4], estimated orientation
+ *  @param: float out[4], output array
+ *
+ */
 void calcMagObjectiveFunc(float earthMagInc[4], float mag[4], float q[4], float out[3])
 {
     out[0] = 2 * earthMagInc[1] * (0.5f - q[2] * q[2] - q[3] * q[3]) + 2 * earthMagInc[3] * (q[1] * q[3] - q[0] * q[2]) - mag[1];
@@ -101,6 +141,12 @@ void calcMagObjectiveFunc(float earthMagInc[4], float mag[4], float q[4], float 
     out[2] = 2 * earthMagInc[1] * (q[0] * q[2] + q[1] * q[3]) + 2 * earthMagInc[3] * (0.5f - q[1] * q[1] - q[2] * q[2]) - mag[3];
 }
 
+/**
+ *  Calculates the Jacobian  matrix of the Magnetometer  data
+ *  @param: float q [4], estimated orientation
+ *  @param: float b [3], vector where filter ref direc is the same of earth mag field
+ *  @param: float J[3][4], Output of Jacboian matrix with size 3x4
+ */
 void calcMagJacobianMat(float q[4], float b[3], float J[3][4])
 {
     float bx = b[0];
@@ -126,6 +172,18 @@ void calcMagJacobianMat(float q[4], float b[3], float J[3][4])
     J[2][3] = 2 * bx * q2;
 }
 
+/**
+ * Calculates the accelerometer objective function for gradient descent.
+ * This expresses the difference between the expected gravity vector (from quaternion) and measured acceleration.
+ * Used as the "f" vector in Madgwick's gradient computation.
+ * @param q     [4] Estimated orientation quaternion.
+ * @param accel [4] Measured accelerometer data (first element ignored; a_x, a_y, a_z at [1],[2],[3]).
+ * @param out   [3] Output: objective function vector.
+ *
+ * out[0]: Error along X-axis.
+ * out[1]: Error along Y-axis.
+ * out[2]: Error along Z-axis.
+ */
 void calcAccelObjFunc(float q[4], float accel[4], float out[3])
 {
     float ax = accel[1];
@@ -137,6 +195,12 @@ void calcAccelObjFunc(float q[4], float accel[4], float out[3])
     out[2] = 2 * (0.5f - q[1] * q[1] - q[2] * q[2]) - az;
 }
 
+/**
+ * Computes the Jacobian matrix of the accelerometer objective function with respect to the quaternion.
+ * This is the partial derivative d(f_accel)/d(q) used in gradient descent.
+ * @param q [4]     Estimated orientation quaternion.
+ * @param J [3][4]  Output: 3x4 Jacobian matrix.
+ */
 void calcAccelJacobianMat(float q[4], float J[3][4])
 {
     J[0][0] = -2 * q[2];
@@ -155,6 +219,11 @@ void calcAccelJacobianMat(float q[4], float J[3][4])
     J[2][3] = 0;
 }
 
+/**
+ * Transposes a 3x4 matrix into a 4x3 matrix.
+ * @param q   [3][4] Input matrix.
+ * @param out [4][3] Output: transposed matrix (out[j][i] = q[i][j]).
+ */
 void mat3x4Transpose(float q[3][4], float out[4][3])
 {
     for (int i = 0; i < 3; i++)
@@ -166,6 +235,13 @@ void mat3x4Transpose(float q[3][4], float out[4][3])
     }
 }
 
+/**
+ * Concatenates two 3-element vectors into a single 6-element vector.
+ * Used for combining magnetometer and accelerometer objective functions.
+ * @param fg  [3]  First vector (e.g., magnetometer error).
+ * @param fb  [3]  Second vector (e.g., accelerometer error).
+ * @param out [6]  Output: combined vector ([fg, fb]).
+ */
 void magAndAccelObjFunc(float fg[3], float fb[3], float out[6])
 {
     for (int i = 0; i < 3; i++)
@@ -175,6 +251,13 @@ void magAndAccelObjFunc(float fg[3], float fb[3], float out[6])
     }
 }
 
+/**
+ * Stacks two 3x4 Jacobian matrices (mag and accel) vertically and transposes the result.
+ * Final output is 4x6, used for computing the quaternion gradient in Madgwick's filter.
+ * @param Jg   [3][4] Magnetometer Jacobian.
+ * @param Jb   [3][4] Accelerometer Jacobian.
+ * @param out  [4][6] Output: stacked and transposed matrix.
+ */
 void magAndAccelJacobT(float Jg[3][4], float Jb[3][4], float out[4][6])
 {
     float stacked[6][4];
@@ -192,6 +275,13 @@ void magAndAccelJacobT(float Jg[3][4], float Jb[3][4], float out[4][6])
             out[i][j] = stacked[j][i];
 }
 
+/**
+ * Matrix-vector multiplication: multiplies a 4x6 matrix by a 6x1 vector to get a 4x1 vector.
+ * Used to compute the gradient vector in Madgwick's filter: gradient = J^T * f.
+ * @param magAndAccelJMatT [4][6]  Transposed, stacked Jacobian matrix.
+ * @param magAndAccelObj   [6]     Combined objective function vector.
+ * @param out              [4]     Output: gradient vector (length 4).
+ */
 void gradientObjFunc(float magAndAccelJMatT[4][6], float magAndAccelObj[6], float out[4])
 {
     for (int i = 0; i < 4; i++)
@@ -204,6 +294,15 @@ void gradientObjFunc(float magAndAccelJMatT[4][6], float magAndAccelObj[6], floa
     }
 }
 
+/**
+ * Calculates the adaptive step size (μ_t) for Madgwick's filter.
+ * This determines how large a step to take in gradient descent, based on quaternion derivative norm.
+ * μ_t = α * ||q̇_ω|| * Δt, where α is augmentationOfStepSize.
+ * @param augmentationOfStepSize Scalar parameter (α, usually > 1).
+ * @param quatDeriv [4]   Quaternion derivative (from gyro).
+ * @param samplingSize    Sampling period (Δt).
+ * @param out             Pointer to step size output.
+ */
 void calcStepSize(float augmentationOfStepSize, float quatDeriv[4], float samplingSize, float *out)
 {
     if (augmentationOfStepSize < 1)
@@ -216,9 +315,16 @@ void calcStepSize(float augmentationOfStepSize, float quatDeriv[4], float sampli
     *out = augmentationOfStepSize * norm * samplingSize;
 }
 
+/**
+ * Updates the quaternion estimate using a step of gradient descent.
+ * q_new = normalize(q - μ * (gradient / ||gradient||))
+ * @param q        [4] Current quaternion estimate.
+ * @param stepSize      Step size (μ_t).
+ * @param gradient [4]  Gradient vector (from J^T * f).
+ * @param out      [4]  Output: updated, normalized quaternion.
+ */
 void calcGradientDescentQuat(float q[4], float stepSize, float gradient[4], float out[4])
 {
-
     float temp[4];
     float normalizedGradient[4];
 
@@ -233,11 +339,24 @@ void calcGradientDescentQuat(float q[4], float stepSize, float gradient[4], floa
     normalizeQuat(out, out);
 }
 
+/**
+ * Normalizes a quaternion gradient to get the direction of the error.
+ * @param gradient [4] Quaternion gradient vector.
+ * @param out      [4] Output: normalized direction of error quaternion.
+ */
 void directionOfErrorQuat(float gradient[4], float out[4])
 {
     normalizeQuat(gradient, out);
 }
 
+/**
+ * Calculates the estimated quaternion derivative for Madgwick's update step.
+ * q̇_est = q̇_ω - β * directionOfErrorQuat
+ * @param accelQuatDerivative [4] Derivative from gyro (q̇_ω).
+ * @param beta               Filter gain parameter (β, sometimes called μ).
+ * @param direcOfErrorQuat   [4] Direction of error quaternion (unit vector).
+ * @param out                [4] Output: estimated quaternion derivative.
+ */
 void estimatedQuatDeriv(float accelQuatDerivative[4], const float beta, float direcOfErrorQuat[4], float out[4])
 {
     float temp[4];
@@ -250,6 +369,13 @@ void estimatedQuatDeriv(float accelQuatDerivative[4], const float beta, float di
     normalizeQuat(out, out);
 }
 
+/**
+ * Computes the gyro error quaternion (used to correct for gyro bias).
+ * error = 2 * q * conj(directionOfErrorQuat)
+ * @param q                [4] Current quaternion estimate.
+ * @param direcOfErrorQuat [4] Direction of error quaternion (normalized).
+ * @param out              [4] Output: gyro error quaternion.
+ */
 void getGyroError(float q[4], float direcOfErrorQuat[4], float out[4])
 {
     float temp[4];
@@ -259,6 +385,14 @@ void getGyroError(float q[4], float direcOfErrorQuat[4], float out[4])
     quatProduct(qConjugate, direcOfErrorQuat, out);
 }
 
+/**
+ * Integrates gyro error over time to estimate the gyroscope bias (for drift correction).
+ * out[i] += integralGain * gyroError[i] * samplingSize
+ * @param gyroError    [4] Gyro error quaternion.
+ * @param samplingSize Scalar time step.
+ * @param integralGain Scalar gain for integral update.
+ * @param out [4]      Output: accumulated gyro bias.
+ */
 void getGyroBias(float gyroError[4], float samplingSize, float integralGain, float out[4])
 {
     for (int i = 0; i < 4; ++i)
@@ -267,6 +401,14 @@ void getGyroBias(float gyroError[4], float samplingSize, float integralGain, flo
     }
 }
 
+/**
+ * Computes bias-compensated gyro measurement for Madgwick filter update.
+ * Subtracts estimated gyro bias from measured (or predicted) gyro data.
+ * @param accel    [4] Gyro measurement (gyro_w), typically [0, gx, gy, gz].
+ * @param gyroBias [4] Estimated gyro bias (integral).
+ * @param out [4]      Output: bias-compensated gyro measurement.
+ * @note Only indices 1..3 are used; out[0] is set to zero.
+ */
 void getCompensatedGyroMeas(float accel[4], float gyroBias[4], float out[4])
 {
     out[0] = 0;

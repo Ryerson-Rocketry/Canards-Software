@@ -52,7 +52,8 @@ void calculateOrientation(void *argument)
         .gyro_sensor = {0, 0, 0, 0},
         .compensatedGyroMeasurements = {1, 0, 0, 0},
         .gyroBias = {1, 0, 0, 0},
-        .dt = 0.01f,
+        .dt = 0.01f, // 0.01f is a placeholder for now,
+                     // it can be faster and if we want to be fancy we can dynamically find this val
         .estOrientation = {1, 0, 0, 0},
         .direcErrorQuat = {1, 0, 0, 0},
         .quatEstDeriv = {1, 0, 0, 0},
