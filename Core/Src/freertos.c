@@ -42,6 +42,9 @@ void StartDefaultTask(void *argument)
 // Retrieve Orientation
 void calculateOrientation(void *argument)
 {
+    float yaw = 0;
+    float pitch = 0;
+    float roll = 0;
 
     Madgwick madgwick = {
         .mag_sensor = {0, 0, 0, 0},
@@ -67,6 +70,10 @@ void calculateOrientation(void *argument)
 
         // update madgwick here
         updateMadgwick(&madgwick);
+
+        yaw = madgwick.euler[0];
+        pitch = madgwick.euler[1];
+        roll = madgwick.euler[2];
 
         osDelay(1);
     }

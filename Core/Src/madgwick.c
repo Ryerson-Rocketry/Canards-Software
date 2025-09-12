@@ -38,6 +38,7 @@ void quatProduct(float a[4], float b[4], float out[4])
     out[1] = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
     out[2] = a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1];
     out[3] = a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0];
+    normalizeQuat(out, out);
 }
 
 /*
@@ -228,6 +229,8 @@ void calcGradientDescentQuat(float q[4], float stepSize, float gradient[4], floa
     {
         out[i] = q[i] - temp[i];
     }
+
+    normalizeQuat(out, out);
 }
 
 void directionOfErrorQuat(float gradient[4], float out[4])
@@ -244,6 +247,7 @@ void estimatedQuatDeriv(float accelQuatDerivative[4], const float beta, float di
     {
         out[i] = accelQuatDerivative[i] - temp[i];
     }
+    normalizeQuat(out, out);
 }
 
 void getGyroError(float q[4], float direcOfErrorQuat[4], float out[4])
