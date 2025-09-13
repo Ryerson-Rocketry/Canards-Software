@@ -10,3 +10,7 @@
 - [ ] Error/status register checking
 - [ ] Add documentation for all functions
 - [ ] Write basic test application
+
+# TODO - ICM20948
+- [] Finish reading ICM20948 datasheet
+- [] Write SPI read/write helper functions 
