@@ -59,7 +59,7 @@ HAL_StatusTypeDef bmi088Read(uint8_t reg, uint8_t *dataBuff, int length)
     memset(&tx[1], 0x00, length);
     status = HAL_SPI_TransmitReceive(&hspi2, tx, rx, length + 1, HAL_MAX_DELAY);
 
-    if (status)
+    if (status == HAL_OK)
     {
         memcpy(dataBuff, &rx[1], length);
     }
@@ -78,7 +78,7 @@ void bmi088SoftReset(bool gyro, bool accel)
     if (gyro)
     {
         GYRO_CS_LOW();
-        ret = bmi088Write(BMI088_ACC_SOFTRESET_REG, BMI088_SOFTRESET_VAL);
+        ret = bmi088Write(BMI088_GYR_SOFTRESET_REG, BMI088_SOFTRESET_VAL);
         GYRO_CS_HIGH();
         osDelay(30);
 
@@ -96,7 +96,7 @@ void bmi088SoftReset(bool gyro, bool accel)
 
         if (ret != HAL_OK)
         {
-            print("Gyro Soft Reset Failed");
+            print("Accel Soft Reset Failed");
         }
 
         osDelay(10);
@@ -111,7 +111,9 @@ void bmi088SoftReset(bool gyro, bool accel)
  */
 void bmi088SwitchGyroMode(uint8_t mode)
 {
-    if (mode != BMI088_GYRO_NORMAL_MODE || mode != BMI088_GYRO_SUSPEND_MODE || mode != BMI088_GYRO_DEEP_SUSPEND_MODE)
+    if (mode != BMI088_GYRO_NORMAL_MODE &&
+        mode != BMI088_GYRO_SUSPEND_MODE &&
+        mode != BMI088_GYRO_DEEP_SUSPEND_MODE)
     {
         return;
     }
@@ -151,7 +153,7 @@ void bmi088SwitchGyroMode(uint8_t mode)
  */
 void bmi088AccelMode(uint8_t mode)
 {
-    if (mode != BMI088_ACC_PWR_CONF_ACTIVE_MODE || mode != BMI088_ACC_PWR_CONF_SUSPEND_MODE)
+    if (mode != BMI088_ACC_PWR_CONF_ACTIVE_MODE && mode != BMI088_ACC_PWR_CONF_SUSPEND_MODE)
     {
         return;
     }
@@ -188,33 +190,24 @@ void bmi088AccelSetPower(bool on)
         print("Unable to power ON/OFF accelerometer");
     }
 }
-/**
- *  Set the FIFO mode of the accelerometer
- *      0 = STREAM mode
- *      1 = FIFO mode
- */
+
 void bmi088SetAccelFIFOMode(uint8_t mode)
 {
-    if (mode != BMI088_FIFO_MODE_REG || BMI088_ACC_CONF_REG)
+    if (mode != BMI088_ACCEL_FIFO_MODE && mode != BMI088_ACCEL_STREAM_MODE)
     {
         return;
     }
 
-    uint8_t currRegVal;
-
+    uint8_t regVal;
     ACCEL_CS_LOW();
-    bmi088Read(BMI088_FIFO_MODE_REG, &currRegVal, 1);
+    bmi088Read(BMI088_FIFO_MODE_REG, &regVal, 1);
     ACCEL_CS_HIGH();
 
-    mode = currRegVal &= ~0x03;
-    mode |= 0x02;
+    regVal &= ~0x03;
+    regVal |= (mode & 0x03);
 
-    if (mode == BMI088_ACCEL_FIFO_MODE)
-    {
-        mode |= BMI088_ACCEL_FIFO_MODE;
-    }
     ACCEL_CS_LOW();
-    bmi088Write(BMI088_FIFO_MODE_REG, mode);
+    bmi088Write(BMI088_FIFO_MODE_REG, regVal);
     ACCEL_CS_HIGH();
 }
 
@@ -222,7 +215,7 @@ void bmi088SetAccelConfODRnBandwidth()
 {
     // need to change these values to match PID loop
     // um too lazy to make this changeable so I will be using 400hz and normal 😀
-    uint8_t val = (BMI088_ACC_BWP_NORMAL << 4) || BMI088_ACC_ODR_VAL;
+    uint8_t val = (BMI088_ACC_BWP_NORMAL << 4) | BMI088_ACC_ODR_VAL;
 
     ACCEL_CS_LOW();
     bmi088Write(BMI088_ACC_CONF_REG, val);
@@ -237,10 +230,11 @@ void bmi088SetAccelRange()
     bmi088Read(BMI088_ACC_RANGE_REG, &currRegVal, 1);
     ACCEL_CS_HIGH();
 
-    uint8_t val = currRegVal | BMI088_ACC_RANGE_VAL;
+    currRegVal &= ~0x03;
+    currRegVal |= BMI088_ACC_RANGE_VAL;
 
     ACCEL_CS_LOW();
-    bmi088Write(BMI088_ACC_RANGE_REG, val);
+    bmi088Write(BMI088_ACC_RANGE_REG, currRegVal);
     ACCEL_CS_HIGH();
 }
 
@@ -260,7 +254,7 @@ void bmi088SetGyroRange()
 
 void bmi088ConfigDataReadyInt(uint8_t gyroMode)
 {
-    if (gyroMode != BMI088_GYRO_EN_DATA_READY_INT || gyroMode != BMI088_GYRO_EN_FIFO_INT)
+    if (gyroMode != BMI088_GYRO_EN_DATA_READY_INT && gyroMode != BMI088_GYRO_EN_FIFO_INT)
     {
         return;
     }
@@ -301,10 +295,10 @@ void bmi088ConfigDataReadyInt(uint8_t gyroMode)
     gyroIntConfigRegVal &= ~0x0F;
 
     // push-pull and active high
-    gyroCtrlRegVal |= BMI088_GYRO_INT_PIN_CONFIG_VAL;
+    gyroIntConfigRegVal |= BMI088_GYRO_INT_PIN_CONFIG_VAL;
 
     GYRO_CS_LOW();
-    bmi088Write(BMI088_GYRO_INT3_INT4_IO_CONF_REG, gyroCtrlRegVal);
+    bmi088Write(BMI088_GYRO_INT3_INT4_IO_CONF_REG, gyroIntConfigRegVal);
     GYRO_CS_HIGH();
 
     // Map the data ready interrupt pin to one of the interrupt pins INT3 and/or INT4.
@@ -323,6 +317,43 @@ void bmi088ConfigDataReadyInt(uint8_t gyroMode)
     GYRO_CS_LOW();
     bmi088Write(BMI088_GYRO_INT3_INT4_IO_MAP_REG, gyroIntToPinMapVal);
     GYRO_CS_HIGH();
+
+    // Config Accelerometer Data Ready Interrupts
+
+    // Config INT 1
+    uint8_t accelInt1ConfigVal;
+    ACCEL_CS_LOW();
+    bmi088Read(BMI088_ACC_INT1_IO_CONF_REG, &accelInt1ConfigVal, 1);
+    ACCEL_CS_HIGH();
+
+    // set bit 0-5 to 0
+    accelInt1ConfigVal &= ~0x1F;
+    // set INT1 as active high and output interrupt
+    accelInt1ConfigVal |= BMI088_ACC_INT_PIN_CONFIG_VAL;
+
+    ACCEL_CS_LOW();
+    bmi088Write(BMI088_ACC_INT1_IO_CONF_REG, accelInt1ConfigVal);
+    ACCEL_CS_HIGH();
+
+    // Config INT2
+    uint8_t accelInt2ConfigVal;
+    ACCEL_CS_LOW();
+    bmi088Read(BMI088_ACC_INT2_IO_CONF_REG, &accelInt2ConfigVal, 1);
+    ACCEL_CS_HIGH();
+
+    // set bit 0-5 to 0
+    accelInt2ConfigVal &= ~0x1F;
+    // set INT1 as active high and output interrupt
+    accelInt2ConfigVal |= BMI088_ACC_INT_PIN_CONFIG_VAL;
+
+    ACCEL_CS_LOW();
+    bmi088Write(BMI088_ACC_INT2_IO_CONF_REG, accelInt2ConfigVal);
+    ACCEL_CS_HIGH();
+
+    // map data ready interrupt to pins INT1/INT2
+    ACCEL_CS_LOW();
+    bmi088Write(BMI088_ACC_INT1_INT2_MAP_DATA, BMI088_ACC_INT_MAP_PIN_VAL);
+    ACCEL_CS_HIGH();
 }
 
 void bmi088Init()
@@ -351,4 +382,7 @@ void bmi088Init()
 
     // set Gyroscope Range
     bmi088SetGyroRange();
+
+    // set up the data interrupts
+    bmi088ConfigDataReadyInt(BMI088_ACCEL_STREAM_MODE);
 }

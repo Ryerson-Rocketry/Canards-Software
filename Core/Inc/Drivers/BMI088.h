@@ -15,6 +15,9 @@
 #define BMI088_GYRO_INT_CTRL_REG 0x15
 #define BMI088_GYRO_INT3_INT4_IO_CONF_REG 0x16
 #define BMI088_GYRO_INT3_INT4_IO_MAP_REG 0x18
+#define BMI088_ACC_INT1_IO_CONF_REG 0x53
+#define BMI088_ACC_INT2_IO_CONF_REG 0x54
+#define BMI088_ACC_INT1_INT2_MAP_DATA 0x58
 
 // reg values
 #define BMI088_SOFTRESET_VAL 0xB6
@@ -35,6 +38,8 @@
 #define BMI088_GYRO_EN_DATA_READY_INT 0x08
 #define BMI088_GYRO_EN_FIFO_INT 0x04
 #define BMI088_GYRO_INT_PIN_CONFIG_VAL 0x05
+#define BMI088_ACC_INT_PIN_CONFIG_VAL 0x0A
+#define BMI088_ACC_INT_MAP_PIN_VAL 0x42
 
 // CS Pins (need to be changed)
 #define ACCEL_CS_GPIO_PORT GPIOA
@@ -57,3 +62,4 @@ void bmi088SetAccelFIFOMode(uint8_t mode);
 void bmi088SetAccelRange();
 void bmi088SetGyroRange();
 void bmi088SetGyroBandwidth();
+void bmi088ConfigDataReadyInt(uint8_t gyroMode);

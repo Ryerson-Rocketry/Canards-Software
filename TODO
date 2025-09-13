@@ -1,15 +1,17 @@
 # TODO – BMI088 Driver
 
 - [x] Finish reading BMI088 datasheet!
-- [ ] Write SPI read/write helper functions
-- [ ] Write initialization routine (accel & gyro)
+- [x] Write SPI read/write helper functions
+- [x] Write initialization routine (accel & gyro)
 - [ ] Implement burst read for accel & gyro data
-- [ ] Add timestamp
-- [ ] Handle power mode transitions
-- [ ] Add self-test routines
-- [ ] Error/status register checking
-- [ ] Add documentation for all functions
+- [ ] Add timestamp 
+- [x] Handle power mode transitions
+- [ ] Add self-test routines (Someone can implement this I am so freaking tired)
+- [ ] Error/status register checking 🥲
+- [ ] Add documentation for all functions 😭
 - [ ] Write basic test application
+- [ ] Add ID Check
+- [ ] Only enable one data ready interrupt for accel and gyro each ( we have two rn)
 
 # TODO - ICM20948
 - [] Finish reading ICM20948 datasheet
