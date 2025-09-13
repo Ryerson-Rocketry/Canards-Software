@@ -28,13 +28,3 @@ void StartDefaultTask(void *argument)
         osDelay(1);
     }
 }
-
-// Retrieve Orientation
-void calculateOrientation(void *argument)
-{
-
-    for (;;)
-    {
-        osDelay(1);
-    }
-}
