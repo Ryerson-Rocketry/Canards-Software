@@ -1,0 +1,12 @@
+# TODO – BMI088 Driver
+
+- [x] Finish reading BMI088 datasheet!
+- [ ] Write SPI read/write helper functions
+- [ ] Write initialization routine (accel & gyro)
+- [ ] Implement burst read for accel & gyro data
+- [ ] Add timestamp
+- [ ] Handle power mode transitions
+- [ ] Add self-test routines
+- [ ] Error/status register checking
+- [ ] Add documentation for all functions
+- [ ] Write basic test application
