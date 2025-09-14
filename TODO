@@ -3,14 +3,14 @@
 - [x] Finish reading BMI088 datasheet!
 - [x] Write SPI read/write helper functions
 - [x] Write initialization routine (accel & gyro)
-- [ ] Implement burst read for accel & gyro data
-- [ ] Add timestamp 
+- [x] Implement burst read for accel & gyro data
 - [x] Handle power mode transitions
+- [] Enable SPI DMA 
 - [ ] Add self-test routines (Someone can implement this I am so freaking tired)
 - [ ] Error/status register checking 🥲
 - [ ] Add documentation for all functions 😭
-- [ ] Write basic test application
-- [ ] Add ID Check
+- [ ] Write basic test application (I am not writing this shi 😭😭😭 someone can do it 4 me)
+- [ ] Add ID Check (this is simple)
 - [ ] Only enable one data ready interrupt for accel and gyro each ( we have two rn)
 
 # TODO - ICM20948

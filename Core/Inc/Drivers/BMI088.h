@@ -18,6 +18,8 @@
 #define BMI088_ACC_INT1_IO_CONF_REG 0x53
 #define BMI088_ACC_INT2_IO_CONF_REG 0x54
 #define BMI088_ACC_INT1_INT2_MAP_DATA 0x58
+#define BMI088_ACC_DATA_REG 0x12
+#define BMI088_GYRO_DATA_REG 0x02
 
 // reg values
 #define BMI088_SOFTRESET_VAL 0xB6
@@ -47,6 +49,10 @@
 #define GYRO_CS_GPIO_PORT GPIOA
 #define GYRO_CS_GPIO_PIN GPIO_PIN_0
 
+// Sensor INT pins (needs to be changed)
+#define GPIO_PIN_ACC_INT_VAL GPIO_PIN_0
+#define GPIO_PIN_GYRO_INT_VAL GPIO_PIN_1
+
 #define GYRO_SOFTRESET true
 #define ACCEL_SOFTRESET true
 
@@ -63,3 +69,7 @@ void bmi088SetAccelRange();
 void bmi088SetGyroRange();
 void bmi088SetGyroBandwidth();
 void bmi088ConfigDataReadyInt(uint8_t gyroMode);
+float bmi088AccRangeHextoVal(uint8_t accRangeHex);
+void bmi088ReadAccelerometer(float out[4]);
+float bmi088GyroHexToResVal(uint8_t gyroRange);
+void bmi088ReadGyroscope(float out[4]);

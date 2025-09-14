@@ -4,6 +4,7 @@
 #include "BMI088.h"
 #include "string.h"
 #include "stdint.h"
+#include "math.h"
 
 #define ACCEL_CS_PORT ACCEL_CS_GPIO_PORT
 #define ACCEL_CS_PIN ACCEL_CS_GPIO_PIN
@@ -43,7 +44,7 @@ HAL_StatusTypeDef bmi088Read(uint8_t reg, uint8_t *dataBuff, int length)
 {
     if (length < 0)
     {
-        return;
+        return HAL_ERROR;
     }
 
     HAL_StatusTypeDef status;
@@ -84,7 +85,7 @@ void bmi088SoftReset(bool gyro, bool accel)
 
         if (ret != HAL_OK)
         {
-            print("Gyro Soft Reset Failed");
+            return;
         }
     }
 
@@ -96,7 +97,7 @@ void bmi088SoftReset(bool gyro, bool accel)
 
         if (ret != HAL_OK)
         {
-            print("Accel Soft Reset Failed");
+            return;
         }
 
         osDelay(10);
@@ -170,7 +171,7 @@ void bmi088AccelMode(uint8_t mode)
 
     if (status != HAL_OK)
     {
-        print("Unable to switch Accelerometer's mode");
+        return;
     }
     osDelay(1);
 }
@@ -187,7 +188,7 @@ void bmi088AccelSetPower(bool on)
 
     if (status != HAL_OK)
     {
-        print("Unable to power ON/OFF accelerometer");
+        return;
     }
 }
 
@@ -385,4 +386,113 @@ void bmi088Init()
 
     // set up the data interrupts
     bmi088ConfigDataReadyInt(BMI088_ACCEL_STREAM_MODE);
+}
+
+void bmi088ReadAccelerometer(float out[4])
+{
+    HAL_StatusTypeDef status;
+
+    uint8_t accelRawData[6];
+    memset(accelRawData, 0, 6);
+
+    ACCEL_CS_LOW();
+    status = bmi088Read(BMI088_ACC_DATA_REG, accelRawData, 6);
+    ACCEL_CS_HIGH();
+
+    if (status != HAL_OK)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            out[i] = -99.0f;
+        }
+        return;
+    }
+
+    // convert output data into signed 16-bit integer
+    int16_t Accel_X_int16 = (int16_t)(accelRawData[0]) | (int16_t)(accelRawData[1] << 8);
+    int16_t Accel_Y_int16 = (int16_t)(accelRawData[2]) | (int16_t)(accelRawData[3] << 8);
+    int16_t Accel_Z_int16 = (int16_t)(accelRawData[4]) | (int16_t)(accelRawData[5] << 8);
+
+    uint8_t accelRangeHex;
+    ACCEL_CS_LOW();
+    bmi088Read(BMI088_ACC_RANGE_REG, &accelRangeHex, 1);
+    ACCEL_CS_HIGH();
+
+    // Accel_X_in_mg = (Accel_X_int16 / 32768) * 1000 * 2^(<0x41> + 1) * 1.5
+    float rangeVal = powf(2, (accelRangeHex & 0x03) + 1.0f) * 1.5;
+    float Accel_X_in_mg = ((float)Accel_X_int16 / 32768.0f) *
+                          1000.0f * rangeVal;
+    float Accel_Y_in_mg = ((float)Accel_Y_int16 / 32768.0f) *
+                          1000.0f * rangeVal;
+    float Accel_Z_in_mg = ((float)Accel_Z_int16 / 32768.0f) *
+                          1000.0f * rangeVal;
+
+    // make it 4D for madgwick filter
+    out[0] = 0;
+    out[1] = Accel_X_in_mg;
+    out[2] = Accel_Y_in_mg;
+    out[3] = Accel_Z_in_mg;
+}
+
+float bmi088GyroHexToResVal(uint8_t gyroRange)
+{
+    switch (gyroRange)
+    {
+    // return LSB / (deg/s)
+    case 0x00:
+        return 16.384;
+    case 0x01:
+        return 32.768;
+    case 0x02:
+        return 65.536;
+    case 0x03:
+        return 131.072;
+    case 0x04:
+        return 262.144;
+    }
+
+    return -99.0f;
+}
+
+void bmi088ReadGyroscope(float out[4])
+{
+    HAL_StatusTypeDef status;
+    uint8_t gyroRawData[6];
+    memset(gyroRawData, 0, 6);
+
+    GYRO_CS_LOW();
+    status = bmi088Read(BMI088_GYRO_DATA_REG, gyroRawData, 6);
+    GYRO_CS_HIGH();
+
+    if (status != HAL_OK)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            out[i] = -99.0f;
+        }
+        return;
+    }
+
+    int16_t rateX = (int16_t)gyroRawData[0] | (int16_t)(gyroRawData[1] << 8);
+    int16_t rateY = (int16_t)gyroRawData[2] | (int16_t)(gyroRawData[3] << 8);
+    int16_t rateZ = (int16_t)gyroRawData[4] | (int16_t)(gyroRawData[5] << 8);
+
+    uint8_t gyroRangeHex;
+    GYRO_CS_LOW();
+    bmi088Read(BMI088_GYRO_RANGE_REG, &gyroRangeHex, 1);
+    GYRO_CS_HIGH();
+
+    float gyroRes = bmi088GyroHexToResVal(gyroRangeHex);
+
+    if (gyroRes <= 0)
+    {
+        for (int i = 0; i < 4; i++)
+            out[i] = -99.0f;
+        return;
+    }
+
+    out[0] = 0;
+    out[1] = rateX / gyroRes;
+    out[2] = rateY / gyroRes;
+    out[3] = rateZ / gyroRes;
 }
