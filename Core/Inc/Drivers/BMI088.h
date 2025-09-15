@@ -56,20 +56,6 @@
 #define GYRO_SOFTRESET true
 #define ACCEL_SOFTRESET true
 
-void bmi088SoftReset(bool gyro, bool accel);
-HAL_StatusTypeDef bmi088Write(uint8_t reg, uint8_t val);
-HAL_StatusTypeDef bmi088Read(uint8_t reg, uint8_t *dataBuff, int length);
-void bmi088AccelSetPower(bool on);
 void bmi088Init();
-void bmi088AccelMode(uint8_t mode);
-void bmi088SwitchGyroMode(uint8_t mode);
-void bmi088SetAccelConfODRnBandwidth();
-void bmi088SetAccelFIFOMode(uint8_t mode);
-void bmi088SetAccelRange();
-void bmi088SetGyroRange();
-void bmi088SetGyroBandwidth();
-void bmi088ConfigDataReadyInt(uint8_t gyroMode);
-float bmi088AccRangeHextoVal(uint8_t accRangeHex);
 void bmi088ReadAccelerometer(float out[4]);
-float bmi088GyroHexToResVal(uint8_t gyroRange);
 void bmi088ReadGyroscope(float out[4]);
