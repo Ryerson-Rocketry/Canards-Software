@@ -245,6 +245,7 @@ void mmc5983maReadMagnetometer(SemaphoreHandle_t magDataReadySemaphore, float ma
     magData[0];
     for (int i = 0; i < 3; i++)
     {
-        magData[i + 1] = ((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f;
+        // in G units, if we want microTelsa multiply by 100
+        magData[i + 1] = ((((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f) - 131072.0f) / 16384.0f;
     }
 }
