@@ -1,6 +1,8 @@
 #include "ms5611.h"
 #include "spi.h"
 #include "math.h"
+#include "cmsis_os2.h"
+#include "FreeRTOS.h"
 
 #define BARO_CS_GPIO_PORT BARO_CS_PORT
 #define BARO_CS_GPIO_PIN BARO_CS_PIN
@@ -17,7 +19,6 @@ static inline void BARO_CS_HIGH()
 
 HAL_StatusTypeDef ms5611Write(uint8_t val)
 {
-    BARO_SET_SPI_PROTOCOL();
     BARO_CS_LOW();
     HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi3, &val, sizeof(val), HAL_MAX_DELAY);
     BARO_CS_HIGH();
@@ -26,7 +27,6 @@ HAL_StatusTypeDef ms5611Write(uint8_t val)
 
 void ms5611Read(uint8_t reg, uint8_t val, int length)
 {
-    BARO_SET_SPI_PROTOCOL();
     BARO_CS_LOW();
     HAL_SPI_Transmit(&hspi3, &reg, 1, HAL_TIMEOUT);
     HAL_SPI_Receive(&hspi3, &val, length, HAL_MAX_DELAY);
@@ -46,7 +46,6 @@ uint32_t ms5611ReadADC()
     uint8_t tx = MS5611_ADC_REG;
     uint8_t rx[3];
 
-    BARO_SET_SPI_PROTOCOL();
     BARO_CS_LOW();
     HAL_SPI_TransmitReceive(&hspi3, &tx, rx, 3, HAL_MAX_DELAY);
     BARO_CS_HIGH();
@@ -60,7 +59,7 @@ void ms5611ReadPROM(uint16_t out[8])
     for (uint8_t addr = 0; addr < 8; addr++)
     {
         uint8_t cmd = MS5611_BASE_PROM_REG | (addr << 1);
-        uint8_t rx[2] = {0};
+        uint8_t rx[2];
 
         BARO_CS_LOW();
         ms5611Read(cmd, rx, 2);
