@@ -61,10 +61,8 @@
         <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
-    <li><a href="#usage">Usage</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
@@ -74,16 +72,9 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-
-[![Canards Software][product-screenshot]](https://example.com)
-<!-- 
-Here's a blank template to get started. To avoid retyping too much info, do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`, `project_license` -->
 This repository contains the complete firmware and embedded software stack for an STM32-based control canard system, designed for active in-flight stabilization and trajectory correction on high-powered rockets.
 
-
-<!-- <p align="right">(<a href="#readme-top">back to top</a>)</p> -->
-
-
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Built With
 
@@ -99,14 +90,16 @@ This repository contains the complete firmware and embedded software stack for a
 <!-- GETTING STARTED -->
 ## Getting Started
 <!-- TODO: Write how to run this project -->
+WIP
 
 ### Prerequisites
 <!-- TODO: Find out what is needed to run this project locally -->
+WIP
 
 <!-- ROADMAP -->
 ## Roadmap
 <!-- TODO: Come up with a road map for this project -->
-
+WIP
 
 <!-- CONTRIBUTING -->
 ## Contributing
@@ -125,20 +118,9 @@ This repository contains the complete firmware and embedded software stack for a
   <img src="https://contrib.rocks/image?repo=Ryerson-Rocketry/Canards-Software" alt="contrib.rocks image" />
 </a>
 
-
-
-<!-- LICENSE -->
-## License
-
-Distributed under the project_license. See `LICENSE.txt` for more information.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
 <!-- CONTACT -->
 ## Contact
-Contact MetRocketry
+Contact MetRocketry </br>
 Project Link: [https://github.com/Ryerson-Rocketry/Canards-Software](https://github.com/Ryerson-Rocketry/Canards-Software)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
