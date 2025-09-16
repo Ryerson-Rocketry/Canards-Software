@@ -2,9 +2,12 @@
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
+#include "ms5611.h"
 
 // Task handle and attributes
 osThreadId_t defaultTaskHandle;
+uint16_t prom[8];
+int32_t pressure, temperature;
 
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
@@ -25,6 +28,9 @@ void StartDefaultTask(void *argument)
 {
   for (;;)
   {
-    osDelay(1);
+    ms5611Reset();
+    ms5611ReadPROM(prom);
+    ms5611GetPressureAndTemp(prom, &pressure, &temperature);
+    
   }
 }
