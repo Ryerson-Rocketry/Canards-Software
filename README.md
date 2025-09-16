@@ -132,7 +132,9 @@ Project Link: [https://github.com/Ryerson-Rocketry/Canards-Software](https://git
 
 * [Madgwick, S. O. H. "An efficient orientation filter for inertial and inertial/magnetic sensor arrays." (2010)](https://courses.cs.washington.edu/courses/cse466/14au/labs/l4/madgwick_internal_report.pdf)  
     - The original Madgwick filter algorithm paper, which we are using for attitude determination.
-
+* [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template)  
+    - For the README template.
+    
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
