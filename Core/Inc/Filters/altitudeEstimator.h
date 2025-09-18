@@ -11,6 +11,7 @@ extern "C"
     float calculateSamplingPeriod(float time, float iteration);
     void calcKalmanGain(float vertAccelStdDev, float baroStdDev, float out[2]);
     float calcVelCorrection(float samplingTime, float verticalAccel, float baroAlt);
+    float calcPositionError(float baroZ, float estPos);
     void complementaryFilter(
         float samplingPeriod,
         float prev[2],

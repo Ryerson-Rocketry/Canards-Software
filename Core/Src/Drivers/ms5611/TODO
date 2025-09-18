@@ -1,0 +1,3 @@
+# ms5611 Driver
+    - [] CRC check (idk what the hell this is but it checks if baro works or not but I can't find how to do it on datahseet, datasheet is hella weird)
+    

@@ -5,6 +5,7 @@
 #include "madgwick.h"
 #include "queue.h"
 #include <string.h>
+#include "ms5611.h"
 #include "altitudeEstimator.h"
 
 typedef struct
@@ -18,6 +19,8 @@ osThreadId_t defaultTaskHandle;
 osThreadId_t retrieveOrientationTaskHandle;
 osThreadId_t retrieveVelAndAltitudeTaskHandle;
 QueueHandle_t calcVelAndHeightQueue;
+
+uint16_t prom[8];
 
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
@@ -112,23 +115,27 @@ void calculateOrientation(void *argument)
 
 void calcVelAndHeight(void *argument)
 {
+    ms5611Reset();
+    ms5611ReadPROM(prom);
+
     VelAltMsg rx;
     float K[2] = {0.10f, 0.05f}; // Tune as needed
     float x[2] = {0.0f, 0.0f};   // [height, velocity]
-    float fcBaro = 5.0f;         // Hz
-    float baroPressure;
+    int32_t baroPressure, temperature;
     float initialPressure;
     float baroAltitude, filteredBaroAlt;
     float vertLinAccel;
+    float alphaBaro = 0.2f;
 
+    // Get the first message to set the filter baseline
     xQueueReceive(calcVelAndHeightQueue, &rx, portMAX_DELAY);
 
-    // TODO: Read Barometer for initial pressure
-
-    initialPressure = baroPressure;
+    // Read barometer for initial pressure
+    ms5611GetPressureAndTemp(prom, &baroPressure, &temperature);
+    initialPressure = (float)baroPressure;
 
     // Compute initial altitude and set filter to that
-    baroAltitude = pressureToAltitude(baroPressure, initialPressure);
+    baroAltitude = pressureToAltitude((float)baroPressure, initialPressure);
     filteredBaroAlt = baroAltitude;
 
     TickType_t prevTick = xTaskGetTickCount();
@@ -136,9 +143,7 @@ void calcVelAndHeight(void *argument)
     for (;;)
     {
         if (xQueueReceive(calcVelAndHeightQueue, &rx, portMAX_DELAY) != pdPASS)
-        {
             continue;
-        }
 
         TickType_t currTick = xTaskGetTickCount();
         float timeSampled = (float)(currTick - prevTick) / (float)configTICK_RATE_HZ;
@@ -148,21 +153,21 @@ void calcVelAndHeight(void *argument)
         }
 
         prevTick = currTick;
-        float alphaBaro = alphaFromFc(fcBaro, timeSampled);
 
-        // TODO: Read barometer
+        // Read barometer
+        ms5611GetPressureAndTemp(prom, &baroPressure, &temperature);
+        baroAltitude = pressureToAltitude((float)baroPressure, initialPressure);
 
-        baroAltitude = pressureToAltitude(baroPressure, initialPressure);
-
+        // IIR filter for baro altitude
         filteredBaroAlt = iirFilter(baroAltitude, filteredBaroAlt, alphaBaro);
 
         vertLinAccel = calcVerticalLinearAccel(rx.accel, rx.orientation);
 
+        // Fusion
         float posError = calcPositionError(filteredBaroAlt, x[0]);
-        float velCorr = calcVelCorrection(timeSampled, vertLinAccel, filteredBaroAlt);
+        float velCorr = timeSampled * vertLinAccel;
 
         float out[2];
-
         complementaryFilter(timeSampled, x, K, posError, velCorr, out);
 
         x[0] = out[0]; // Altitude
