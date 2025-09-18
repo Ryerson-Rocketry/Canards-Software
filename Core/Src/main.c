@@ -4,6 +4,7 @@
 #include "spi.h"
 #include "usart.h"
 #include "gpio.h"
+#include "wwdg.h"
 
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
@@ -18,6 +19,7 @@ int main(void)
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   MX_SPI3_Init();
+  MX_WWDG_Init();
 
   osKernelInitialize();
   MX_FREERTOS_Init();
