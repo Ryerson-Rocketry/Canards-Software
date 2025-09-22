@@ -66,6 +66,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
 }
 
+// Edit here for watchdog failure unless there is another error 🤷‍♂️🤷‍♂️🤷‍♂️
 void Error_Handler(void)
 {
   __disable_irq();
