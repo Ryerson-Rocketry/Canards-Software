@@ -28,16 +28,14 @@ HAL_StatusTypeDef ms5611Write(uint8_t val)
 void ms5611Read(uint8_t reg, uint8_t *val, int length)
 {
     BARO_CS_LOW();
-    HAL_SPI_Transmit(&hspi3, &reg, 1, HAL_TIMEOUT);
-    HAL_SPI_Receive(&hspi3, &val, length, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(&hspi3, &reg, 1, HAL_MAX_DELAY);
+    HAL_SPI_Receive(&hspi3, val, length, HAL_MAX_DELAY);
     BARO_CS_HIGH();
 }
 
 void ms5611Reset()
 {
-    BARO_CS_LOW();
     ms5611Write(MS5611_RESET_REG);
-    BARO_CS_HIGH();
     osDelay(3);
 }
 
@@ -60,9 +58,7 @@ void ms5611ReadPROM(uint16_t out[8])
         uint8_t tx = MS5611_BASE_PROM_REG | (addr << 1);
         uint8_t rx[2];
 
-        BARO_CS_LOW();
         ms5611Read(tx, rx, 2);
-        BARO_CS_HIGH();
 
         // MSB first
         out[addr] = (uint16_t)(rx[0] << 8) | rx[1];
@@ -94,19 +90,31 @@ void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temp
     int64_t OFF = ((int64_t)prom[2] << 16) + (((int64_t)prom[4] * dT) / (1 << 7));
     int64_t SENS = ((int64_t)prom[1] << 15) + (((int64_t)prom[3] * dT) / (1 << 8));
 
+    int64_t T2 = 0, OFF2 = 0, SENS2 = 0;
+
     if (TEMP < 2000)
     {
+        int64_t dT64 = (int64_t)dT;
         int32_t T2 = ((int64_t)dT * dT) >> 31;
         int64_t OFF2 = 5 * ((TEMP - 2000) * (TEMP - 2000)) / 2;
         int64_t SENS2 = OFF2 / 2;
 
-        TEMP -= T2;
-        OFF -= OFF2;
-        SENS -= SENS2;
+        if (TEMP < -1500)
+        {
+            int64_t t3 = (int64_t)TEMP + 1500;
+            int64_t t3s = t3 * t3;
+            OFF2 += 7 * t3s;
+            SENS2 += (11 * t3s) >> 1;
+        }
     }
 
+    TEMP -= T2;
+    OFF -= OFF2;
+    SENS -= SENS2;
+
+    int64_t P64 = (((int64_t)D1 * SENS) >> 21) - OFF;
     int32_t P = (((D1 * SENS) >> 21) - OFF) >> 15;
 
-    *pressure = P;
-    *temperature = TEMP;
+    *pressure = P;       // in Pa
+    *temperature = TEMP; // in 0.01 C
 }
