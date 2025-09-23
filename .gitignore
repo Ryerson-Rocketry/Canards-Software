@@ -1,69 +1,25 @@
-# Build and output folders
+/build/
 /Debug/
 /Release/
-/build/
-/EWARM/
-/cmake/
-
-
-# STM32CubeIDE/CubeMX generated files
-*.ioc
-*.mxproject
+*.user
+*.launch
 *.log
-*.bin
+*.swp
+*.swo
+*.bak
+*.o
+*.d
 *.elf
+*.bin
 *.hex
 *.map
-*.lst
-*.dep
-*.exp
-*.srec
-*.su
-*.d
-*.o
-*.axf
-*.out
-
-# IDEs
-/.vscode/
+*.list
+*.pyc
+*.DS_Store
+*.cproject
+*.project
 /.settings/
-/.idea/
-/.cproject
-/.project
-/.csettings
-/.mxproject
-*.launch
+EWARM/
 
-# CMake
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-build.ninja
-compile_commands.json
-CTestTestfile.cmake
-
-# Other temp
-*.user
-*.suo
-*.swp
-*.tmp
-
-# Backup files
-*~
-*.bak
-
-# CubeMX auto-generated docs
-/doc/
-/html/
-
-# Python virtual envs (if you use python tools)
-.venv/
-env/
-
-# Misc (add your own as needed)
-*.mdf
-
-# Ignore Middlewares you don’t use (optional)
-# /Middlewares/Third_Party/FatFs/
-# /Middlewares/Third_Party/LwIP/
+.vscode/
+*.mxproject
