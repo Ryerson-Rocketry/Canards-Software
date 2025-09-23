@@ -31,7 +31,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
+    <img src="Images\69541147.png" alt="Logo" width="80" height="80">
   </a>
 
 <h3 align="center">Canards Software</h3>
@@ -94,7 +94,10 @@ WIP
 
 ### Prerequisites
 <!-- TODO: Find out what is needed to run this project locally -->
-WIP
+
+### Installation
+<!-- TODO: Give Steps on how to install and run the project locally -->
+Clone 
 
 <!-- ROADMAP -->
 ## Roadmap
