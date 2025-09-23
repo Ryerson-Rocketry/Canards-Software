@@ -42,14 +42,18 @@ void StartDefaultTask(void *argument)
 void RefreshWatchdog(void *argument)
 {
 
-  //  formula for watchdog tiemr: (1/fhclk) * 4096 * Nwwdg_prescaler * (Nrefresh -Nwindow)
-  osDelay(10);
-
-  // Toggle LED to see if on
-  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-
-  if (HAL_WWDG_Refresh(&hwwdg) != HAL_OK)
+  for (;;)
   {
-    Error_Handler();
+
+    //  formula for watchdog tiemr: (1/fhclk) * 4096 * Nwwdg_prescaler * (Nrefresh -Nwindow)
+    osDelay(10);
+
+    // Toggle LED to see if on
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
+    if (HAL_WWDG_Refresh(&hwwdg) != HAL_OK)
+    {
+      Error_Handler();
+    }
   }
 }
