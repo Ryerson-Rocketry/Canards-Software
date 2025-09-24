@@ -14,13 +14,14 @@ jobs:
           sudo apt-get install -y cmake build-essential ninja-build cppcheck
 
       - name: Run cppcheck
-        run: cppcheck --enable=all \
+        run: |
+          cppcheck --enable=all \
           --suppress=style \
+          --suppress=unusedFunction \
           --suppress=unreadVariable \
           --suppress=uninitvar \
           --suppress=missingInclude \
           --suppress=missingIncludeSystem \
-          --suppress=unusedFunction \
           --suppress=toomanyconfigs \
           --suppress=constParameterPointer \
-          --inconclusive --quiet --error-exitcode=1 Core/Src/ Core/Inc/
+          --quiet --inconclusive --error-exitcode=1 Core/Src/ Core/Inc/
