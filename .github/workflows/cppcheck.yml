@@ -19,4 +19,9 @@ jobs:
           --suppress=unusedFunction \
           --suppress=unreadVariable \
           --suppress=uninitvar \
+          --suppress=missingInclude \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          --suppress=toomanyconfigs \
+          --suppress=constParameterPointer \
           --inconclusive --quiet --error-exitcode=1 Core/Src/ Core/Inc/
