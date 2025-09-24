@@ -26,6 +26,6 @@ jobs:
             --suppress=constParameterPointer \
             --quiet --inconclusive Core/Src/ Core/Inc/ 2> cppcheck.log
 
-          grep -v '\[unmatchedSuppression\]' cppcheck.log > filtered_cppcheck.log || true
+          grep -v '\[unmatchedSuppression\]' cppcheck.log | grep -v '\[checkersReport\]' > filtered_cppcheck.log || true
           cat filtered_cppcheck.log
           if grep -Evq '^\s*$' filtered_cppcheck.log; then exit 1; fi
