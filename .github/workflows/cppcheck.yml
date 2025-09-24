@@ -24,4 +24,8 @@ jobs:
             --suppress=missingIncludeSystem \
             --suppress=toomanyconfigs \
             --suppress=constParameterPointer \
-            --quiet --inconclusive --error-exitcode=1 Core/Src/ Core/Inc/
+            --quiet --inconclusive -- Core/Src/ Core/Inc/ 2> cppcheck.log
+
+          grep -v '\[unmatchedSuppression\]' cppcheck.log > filtered_cppcheck.log || true
+          cat filtered_cppcheck.log
+          if grep -Evq '^\s*$' filtered_cppcheck.log; then exit 1; fi
