@@ -16,7 +16,6 @@ jobs:
       - name: Run cppcheck
         run: cppcheck --enable=all \
           --suppress=style \
-          --suppress=unusedFunction \
           --suppress=unreadVariable \
           --suppress=uninitvar \
           --suppress=missingInclude \
