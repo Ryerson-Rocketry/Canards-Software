@@ -24,7 +24,7 @@ jobs:
             --suppress=missingIncludeSystem \
             --suppress=toomanyconfigs \
             --suppress=constParameterPointer \
-            --quiet --inconclusive -- Core/Src/ Core/Inc/ 2> cppcheck.log
+            --quiet --inconclusive Core/Src/ Core/Inc/ 2> cppcheck.log
 
           grep -v '\[unmatchedSuppression\]' cppcheck.log > filtered_cppcheck.log || true
           cat filtered_cppcheck.log
