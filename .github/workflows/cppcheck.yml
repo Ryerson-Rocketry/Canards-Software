@@ -16,12 +16,12 @@ jobs:
       - name: Run cppcheck
         run: |
           cppcheck --enable=all \
-          --suppress=style \
-          --suppress=unusedFunction \
-          --suppress=unreadVariable \
-          --suppress=uninitvar \
-          --suppress=missingInclude \
-          --suppress=missingIncludeSystem \
-          --suppress=toomanyconfigs \
-          --suppress=constParameterPointer \
-          --quiet --inconclusive --error-exitcode=1 Core/Src/ Core/Inc/
+            --suppress=style \
+            --suppress=unusedFunction \
+            --suppress=unreadVariable \
+            --suppress=uninitvar \
+            --suppress=missingInclude \
+            --suppress=missingIncludeSystem \
+            --suppress=toomanyconfigs \
+            --suppress=constParameterPointer \
+            --quiet --inconclusive --error-exitcode=1 Core/Src/ Core/Inc/
