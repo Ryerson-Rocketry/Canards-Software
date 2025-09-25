@@ -7,6 +7,7 @@
 #include <string.h>
 #include "ms5611.h"
 #include "altitudeEstimator.h"
+#include "wwdg.h"
 
 typedef struct
 {
@@ -16,6 +17,7 @@ typedef struct
 
 // Task handle and attributes
 osThreadId_t defaultTaskHandle;
+osThreadId_t refreshWatchdogHandle;
 osThreadId_t retrieveOrientationTaskHandle;
 osThreadId_t retrieveVelAndAltitudeTaskHandle;
 QueueHandle_t calcVelAndHeightQueue;
@@ -26,6 +28,12 @@ const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
     .stack_size = 128 * 4,
     .priority = (osPriority_t)osPriorityNormal,
+};
+
+const osThreadAttr_t refereshWatchdog_Attributes = {
+    .name = "refershWatchdog",
+    .stack_size = 128 * 4,
+    .priority = (osPriority_t)osPriorityAboveNormal7,
 };
 
 const osThreadAttr_t retrieveOrientation_attributes = {
@@ -41,6 +49,7 @@ const osThreadAttr_t retrieveVelAndAltitude_attributes = {
 };
 
 void StartDefaultTask(void *argument);
+void RefreshWatchdog(void *argument);
 void calculateOrientation(void *argument);
 void calcVelAndHeight(void *argument);
 
@@ -51,6 +60,7 @@ void MX_FREERTOS_Init(void)
     configASSERT(calcVelAndHeightQueue != NULL);
 
     defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+    refreshWatchdogHandle = osThreadNew(RefreshWatchdog, NULL, &refereshWatchdog_Attributes);
     retrieveOrientationTaskHandle = osThreadNew(calculateOrientation, NULL, &retrieveOrientation_attributes);
     retrieveVelAndAltitudeTaskHandle = osThreadNew(calcVelAndHeight, NULL, &retrieveVelAndAltitude_attributes);
 }
@@ -61,6 +71,26 @@ void StartDefaultTask(void *argument)
     for (;;)
     {
         osDelay(1);
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    }
+}
+
+void RefreshWatchdog(void *argument)
+{
+
+    for (;;)
+    {
+
+        //  formula for watchdog tiemr: (1/fhclk) * 4096 * Nwwdg_prescaler * (Nrefresh -Nwindow)
+        osDelay(10);
+
+        // Toggle LED to see if on
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
+        if (HAL_WWDG_Refresh(&hwwdg) != HAL_OK)
+        {
+            Error_Handler();
+        }
     }
 }
 

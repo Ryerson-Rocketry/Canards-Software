@@ -16,7 +16,6 @@ float calcVerticalLinearAccel(float accel[4], float orien[4])
     return accelEarthFrame[3] - gravity;
 }
 
-
 float pressureToAltitude(float P, float P0)
 {
     return 44330.0f * (1.0f - powf(P / P0, 0.190294957f));
