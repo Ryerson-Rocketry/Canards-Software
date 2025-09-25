@@ -100,9 +100,9 @@ void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temp
     if (TEMP < 2000)
     {
         int64_t dT64 = (int64_t)dT;
-        int32_t T2 = ((int64_t)dT * dT) >> 31;
-        int64_t OFF2 = 5 * ((TEMP - 2000) * (TEMP - 2000)) / 2;
-        int64_t SENS2 = OFF2 / 2;
+        T2 = ((int64_t)dT * dT) >> 31;
+        OFF2 = 5 * ((TEMP - 2000) * (TEMP - 2000)) / 2;
+        SENS2 = OFF2 / 2;
 
         if (TEMP < -1500)
         {
