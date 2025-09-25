@@ -1,0 +1,31 @@
+name: Check C/C++ Code
+
+on: [push, pull_request]
+
+jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies and Support Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential ninja-build cppcheck
+
+      - name: Run cppcheck
+        run: |
+          cppcheck --enable=all \
+            --suppress=style \
+            --suppress=unusedFunction \
+            --suppress=unreadVariable \
+            --suppress=uninitvar \
+            --suppress=missingInclude \
+            --suppress=missingIncludeSystem \
+            --suppress=toomanyconfigs \
+            --suppress=constParameterPointer \
+            --quiet --inconclusive Core/Src/ Core/Inc/ 2> cppcheck.log
+
+          grep -v '\[unmatchedSuppression\]' cppcheck.log | grep -v '\[checkersReport\]' > filtered_cppcheck.log || true
+          cat filtered_cppcheck.log
+          if grep -Evq '^\s*$' filtered_cppcheck.log; then exit 1; fi
