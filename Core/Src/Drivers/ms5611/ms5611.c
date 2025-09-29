@@ -20,7 +20,7 @@ static inline void BARO_CS_HIGH()
 HAL_StatusTypeDef ms5611Write(uint8_t val)
 {
     BARO_CS_LOW();
-    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi3, &val, sizeof(val), HAL_MAX_DELAY);
+    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &val, sizeof(val), HAL_MAX_DELAY);
     BARO_CS_HIGH();
     return status;
 }
@@ -28,8 +28,8 @@ HAL_StatusTypeDef ms5611Write(uint8_t val)
 void ms5611Read(uint8_t reg, uint8_t val, int length)
 {
     BARO_CS_LOW();
-    HAL_SPI_Transmit(&hspi3, &reg, 1, HAL_TIMEOUT);
-    HAL_SPI_Receive(&hspi3, &val, length, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(&hspi2, &reg, 1, HAL_TIMEOUT);
+    HAL_SPI_Receive(&hspi2, &val, length, HAL_MAX_DELAY);
     BARO_CS_LOW();
 }
 
@@ -47,7 +47,7 @@ uint32_t ms5611ReadADC()
     uint8_t rx[3];
 
     BARO_CS_LOW();
-    HAL_SPI_TransmitReceive(&hspi3, &tx, rx, 3, HAL_MAX_DELAY);
+    HAL_SPI_TransmitReceive(&hspi2, &tx, rx, 3, HAL_MAX_DELAY);
     BARO_CS_HIGH();
 
     return ((uint32_t)(rx[0] << 16)) | ((uint32_t)rx[1] << 8) | rx[0];
@@ -62,7 +62,7 @@ void ms5611ReadPROM(uint16_t out[8])
         uint8_t rx[2];
 
         BARO_CS_LOW();
-        ms5611Read(cmd, rx, 2);
+        ms5611Read(cmd, &rx, 2);
         BARO_CS_HIGH();
 
         // MSB first

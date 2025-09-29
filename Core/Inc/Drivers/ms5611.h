@@ -3,7 +3,7 @@
 #include "main.h"
 
 // subject to change
-#define BARO_CS_PORT GPIOA
+#define BARO_CS_PORT GPIOC
 #define BARO_CS_PIN GPIO_PIN_0
 
 // Register Hex Values
