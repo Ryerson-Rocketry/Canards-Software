@@ -1,0 +1,27 @@
+name: Build Firmware
+
+on:
+  push:
+    branches: [main, uat]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux Support Tools and Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake wget curl build-essential git ninja-build gcc-arm-none-eabi
+
+      - name: Configure CMake
+        run: cmake --preset Debug
+
+      - name: Build
+        run: cmake --build --preset Debug -j
+
+      - name: Check Build Output (Check if Canards.elf is made)
+        run: test -f build/Debug/Canards.elf && echo "Firmware Build Successful" || echo "Firmware Build Unsuccessful"
