@@ -17,20 +17,24 @@ static inline void BARO_CS_HIGH()
     HAL_GPIO_WritePin(BARO_CS_GPIO_PORT, BARO_CS_GPIO_PIN, GPIO_PIN_SET);
 }
 
-HAL_StatusTypeDef ms5611Write(uint8_t val)
+static HAL_StatusTypeDef ms5611Write(uint8_t val)
 {
     BARO_CS_LOW();
-    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &val, sizeof(val), HAL_MAX_DELAY);
+    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &val, sizeof(val), 100);
     BARO_CS_HIGH();
     return status;
 }
 
-void ms5611Read(uint8_t reg, uint8_t val, int length)
+static void ms5611Read(uint8_t reg, uint8_t val, int length)
 {
     BARO_CS_LOW();
-    HAL_SPI_Transmit(&hspi2, &reg, 1, HAL_TIMEOUT);
-    HAL_SPI_Receive(&hspi2, &val, length, HAL_MAX_DELAY);
-    BARO_CS_LOW();
+    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &reg, 1, 100);
+    if (status == HAL_OK)
+    {
+        status = HAL_SPI_Receive(&hspi2, &val, length, 100);
+    }
+    BARO_CS_HIGH();
+    return status;
 }
 
 void ms5611Reset()
@@ -47,10 +51,10 @@ uint32_t ms5611ReadADC()
     uint8_t rx[3];
 
     BARO_CS_LOW();
-    HAL_SPI_TransmitReceive(&hspi2, &tx, rx, 3, HAL_MAX_DELAY);
+    ms5611Read(tx, rx, 3);
     BARO_CS_HIGH();
 
-    return ((uint32_t)(rx[0] << 16)) | ((uint32_t)rx[1] << 8) | rx[0];
+    return ((uint32_t)(rx[0] << 16)) | ((uint32_t)rx[1] << 8) | rx[2];
 }
 
 void ms5611ReadPROM(uint16_t out[8])
@@ -62,7 +66,7 @@ void ms5611ReadPROM(uint16_t out[8])
         uint8_t rx[2];
 
         BARO_CS_LOW();
-        ms5611Read(cmd, &rx, 2);
+        ms5611Read(cmd, rx, 2);
         BARO_CS_HIGH();
 
         // MSB first
@@ -86,12 +90,16 @@ uint32_t ms5611ReadUncompensatedTemp(void)
 
 void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temperature)
 {
+
+    // read digital pressure and temp
     uint32_t D1 = ms5611ReadUncompensatedPressure();
     uint32_t D2 = ms5611ReadUncompensatedTemp();
 
+    // calc temp
     int32_t dT = (int32_t)D2 - ((int32_t)prom[5] << 8);
-    int32_t TEMP = 2000 + ((int64_t)dT * prom[6]) / (1 << 23);
+    int32_t TEMP = 2000 + (((int64_t)dT * prom[6]) / (1 << 23));
 
+    // calc temp compensated pressure
     int64_t OFF = ((int64_t)prom[2] << 16) + (((int64_t)prom[4] * dT) / (1 << 7));
     int64_t SENS = ((int64_t)prom[1] << 15) + (((int64_t)prom[3] * dT) / (1 << 8));
 
@@ -99,8 +107,7 @@ void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temp
 
     if (TEMP < 2000)
     {
-        int64_t dT64 = (int64_t)dT;
-        T2 = ((int64_t)dT * dT) >> 31;
+        T2 = (int32_t)(((int64_t)(dT * dT)) >> 31);
         OFF2 = 5 * ((TEMP - 2000) * (TEMP - 2000)) / 2;
         SENS2 = OFF2 / 2;
 
@@ -117,8 +124,7 @@ void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temp
     OFF -= OFF2;
     SENS -= SENS2;
 
-    int64_t P64 = (((int64_t)D1 * SENS) >> 21) - OFF;
-    int32_t P = (((D1 * SENS) >> 21) - OFF) >> 15;
+    int32_t P = (int32_t)((((int64_t)D1 * SENS) >> 21) - OFF);
 
     *pressure = P;       // in Pa
     *temperature = TEMP; // in 0.01 C
