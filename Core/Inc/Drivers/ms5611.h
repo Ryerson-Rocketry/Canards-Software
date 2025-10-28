@@ -13,6 +13,6 @@
 #define MS5611_ADC_REG 0x00
 #define MS5611_BASE_PROM_REG 0xA0
 
-void ms5611Reset();
-void ms5611ReadPROM(uint16_t out[8]);
+void ms5611Reset(void);
+void ms5611ReadPROM(uint16_t out[6]);
 void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temperature);

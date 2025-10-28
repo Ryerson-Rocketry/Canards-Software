@@ -7,12 +7,12 @@
 #define BARO_CS_GPIO_PORT BARO_CS_PORT
 #define BARO_CS_GPIO_PIN BARO_CS_PIN
 
-static inline void BARO_CS_LOW()
+static inline void BARO_CS_LOW(void)
 {
     HAL_GPIO_WritePin(BARO_CS_GPIO_PORT, BARO_CS_GPIO_PIN, GPIO_PIN_RESET);
 }
 
-static inline void BARO_CS_HIGH()
+static inline void BARO_CS_HIGH(void)
 {
     HAL_GPIO_WritePin(BARO_CS_GPIO_PORT, BARO_CS_GPIO_PIN, GPIO_PIN_SET);
 }
@@ -25,19 +25,19 @@ static HAL_StatusTypeDef ms5611Write(uint8_t val)
     return status;
 }
 
-static void ms5611Read(uint8_t reg, uint8_t val, int length)
+static HAL_StatusTypeDef ms5611Read(uint8_t reg, uint8_t *val, int length)
 {
     BARO_CS_LOW();
     HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &reg, 1, 100);
     if (status == HAL_OK)
     {
-        status = HAL_SPI_Receive(&hspi2, &val, length, 100);
+        status = HAL_SPI_Receive(&hspi2, val, length, 100);
     }
     BARO_CS_HIGH();
     return status;
 }
 
-void ms5611Reset()
+void ms5611Reset(void)
 {
     BARO_CS_LOW();
     ms5611Write(MS5611_RESET_REG);
@@ -45,7 +45,7 @@ void ms5611Reset()
     osDelay(3);
 }
 
-uint32_t ms5611ReadADC()
+uint32_t ms5611ReadADC(void)
 {
     uint8_t tx = MS5611_ADC_REG;
     uint8_t rx[3];
@@ -55,6 +55,41 @@ uint32_t ms5611ReadADC()
     BARO_CS_HIGH();
 
     return ((uint32_t)(rx[0] << 16)) | ((uint32_t)rx[1] << 8) | rx[2];
+}
+
+// what?? I can't even find the formula for this or I am just blind
+uint8_t crc4(uint16_t n_prom[]) {
+  uint16_t n_rem = 0; // CRC remainder
+  
+  // Make a copy of the last word and clear the 4 CRC bits
+  uint16_t crc_read = n_prom[7];
+  n_prom[7] = (n_prom[7] & 0xFFF0); 
+
+  for (uint8_t cnt = 0; cnt < 16; cnt++) { // Loop for all 16 bytes
+    // Select MSB or LSB
+    if (cnt % 2 == 1) {
+      n_rem ^= (uint16_t)((n_prom[cnt >> 1]) & 0x00FF);
+    } else {
+      n_rem ^= (uint16_t)(n_prom[cnt >> 1] >> 8);
+    }
+
+    for (uint8_t n_bit = 8; n_bit > 0; n_bit--) {
+      if (n_rem & 0x8000) {
+        // The polynomial is 0x3000 (equivalent to 0x13 in 4-bit)
+        n_rem = (n_rem << 1) ^ 0x3000;
+      } else {
+        n_rem = (n_rem << 1);
+      }
+    }
+  }
+  
+  // Restore the original value of prom[7] (optional, but good practice)
+  n_prom[7] = crc_read;
+  
+  // Final 4-bit remainder is the CRC
+  n_rem = ((n_rem >> 12) & 0x000F); 
+  
+  return (n_rem ^ 0x00);
 }
 
 void ms5611ReadPROM(uint16_t out[8])
@@ -72,6 +107,18 @@ void ms5611ReadPROM(uint16_t out[8])
         // MSB first
         out[addr] = (uint16_t)(rx[0] << 8) | rx[1];
     }
+
+    uint8_t crc_calculated = crc4(out);
+    uint8_t crc_stored = (out[7] & 0x000F);
+    
+    if (crc_calculated == crc_stored) {
+        return;
+    } else {
+        for (int i = 0; i < 8; i++) {
+            out[i] = 0;
+        }
+    }
+
 }
 
 uint32_t ms5611ReadUncompensatedPressure(void)
