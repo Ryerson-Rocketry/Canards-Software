@@ -51,8 +51,10 @@ void StartDefaultTask()
   for (;;)
   {
     osDelay(1);
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
   }
 }
+
 
 void calculateOrientation()
 {
@@ -73,6 +75,7 @@ void calculateOrientation()
     HAL_UART_Transmit(&huart2, (uint8_t *)uartBuf, strlen(uartBuf), HAL_MAX_DELAY);
 
     osDelay(1);
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
   }
 }
 
