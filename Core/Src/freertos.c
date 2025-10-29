@@ -1,4 +1,5 @@
 #include "FreeRTOS.h"
+#include "projdefs.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -9,14 +10,8 @@ osThreadId_t defaultTaskHandle;
 
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
-};
-
-const osThreadAttr_t calcAltitudeHandle_attributes = {
-    .name = "calcAltitudeTask",
     .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal5,
+    .priority = (osPriority_t)osPriorityNormal,
 };
 
 void StartDefaultTask(void *argument);
@@ -31,24 +26,38 @@ void MX_FREERTOS_Init(void)
 void StartDefaultTask(void *argument)
 {
 
-  uint16_t prom[8];
-  int32_t pressure;
-  int32_t temperature;
+  uint16_t prom[8] = {0};
+  int32_t pressure = 0;
+  int32_t temperature = 0;
   int counter = 0;
+  HAL_StatusTypeDef status = HAL_ERROR;
+
   ms5611Reset();
 
   do {
-    ms5611ReadPROM(prom);
+    status = ms5611ReadPROM(prom);
     counter++;
     if (counter == 10) {
       break;
     }
+    osDelay(pdMS_TO_TICKS(100));
   }
-  while (prom[0] == 0); 
+  while (status != HAL_OK); 
+
+  if (status != HAL_OK)
+  {
+    for(;;)
+    {
+        HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+        osDelay(pdMS_TO_TICKS(100)); // Fast error blink
+    }
+  }
 
   for (;;)
   {
     ms5611GetPressureAndTemp(prom, &pressure, &temperature);
+    osDelay(pdMS_TO_TICKS(250));
+
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
     osDelay(pdMS_TO_TICKS(250));
   }

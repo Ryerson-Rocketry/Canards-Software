@@ -1,8 +1,9 @@
 #include "ms5611.h"
 #include "spi.h"
 #include "math.h"
-#include "cmsis_os2.h"
+#include "cmsis_os.h"
 #include "FreeRTOS.h"
+#include "stm32f4xx_hal_def.h"
 
 #define BARO_CS_GPIO_PORT BARO_CS_PORT
 #define BARO_CS_GPIO_PIN BARO_CS_PIN
@@ -39,9 +40,7 @@ static HAL_StatusTypeDef ms5611Read(uint8_t reg, uint8_t *val, int length)
 
 void ms5611Reset(void)
 {
-    BARO_CS_LOW();
     ms5611Write(MS5611_RESET_REG);
-    BARO_CS_HIGH();
     osDelay(3);
 }
 
@@ -50,9 +49,7 @@ uint32_t ms5611ReadADC(void)
     uint8_t tx = MS5611_ADC_REG;
     uint8_t rx[3];
 
-    BARO_CS_LOW();
     ms5611Read(tx, rx, 3);
-    BARO_CS_HIGH();
 
     return ((uint32_t)(rx[0] << 16)) | ((uint32_t)rx[1] << 8) | rx[2];
 }
@@ -92,7 +89,7 @@ uint8_t crc4(uint16_t n_prom[]) {
   return (n_rem ^ 0x00);
 }
 
-void ms5611ReadPROM(uint16_t out[8])
+HAL_StatusTypeDef ms5611ReadPROM(uint16_t out[8])
 {
 
     for (uint8_t addr = 0; addr < 8; addr++)
@@ -100,25 +97,26 @@ void ms5611ReadPROM(uint16_t out[8])
         uint8_t cmd = MS5611_BASE_PROM_REG | (addr << 1);
         uint8_t rx[2];
 
-        BARO_CS_LOW();
         ms5611Read(cmd, rx, 2);
-        BARO_CS_HIGH();
 
         // MSB first
         out[addr] = (uint16_t)(rx[0] << 8) | rx[1];
     }
 
+
+    if (out[5] == 0 || out[6] == 0)
+    {
+        return HAL_ERROR;
+    }
+
+
     uint8_t crc_calculated = crc4(out);
     uint8_t crc_stored = (out[7] & 0x000F);
     
     if (crc_calculated == crc_stored) {
-        return;
-    } else {
-        for (int i = 0; i < 8; i++) {
-            out[i] = 0;
-        }
+        return HAL_OK;
     }
-
+    return HAL_ERROR;
 }
 
 uint32_t ms5611ReadUncompensatedPressure(void)
@@ -137,6 +135,11 @@ uint32_t ms5611ReadUncompensatedTemp(void)
 
 void ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temperature)
 {
+    if (prom[1] == 0 && prom[2] == 0)  {
+        *pressure = 0;
+        *temperature = 0;
+        return;
+    }
 
     // read digital pressure and temp
     uint32_t D1 = ms5611ReadUncompensatedPressure();
