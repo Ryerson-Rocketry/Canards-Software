@@ -1,9 +1,6 @@
-#include "cmsis_os2.h"
 #include "i2c.h"
 #include "main.h"
 #include "projdefs.h"
-#include "stm32f4xx_hal_def.h"
-#include "stm32f4xx_hal_i2c.h"
 #include "mmc5983ma.h"
 #include <stdbool.h>
 #include "FreeRTOS.h"
@@ -12,7 +9,6 @@
 
 extern I2C_HandleTypeDef hi2c1;
 extern SemaphoreHandle_t gI2c1Mutex;
-extern SemaphoreHandle_t gMagDataReadySemaphore;
 
 /**
  * @brief  Low-level I2C write function with mutex protection.
@@ -26,12 +22,12 @@ HAL_StatusTypeDef write(uint8_t regAddress, uint8_t data)
     {
         status = HAL_I2C_Mem_Write(
             &hi2c1,
-            MAG_ADDRESS,
+            MAG_ADDRESS << 1,
             regAddress,
             I2C_MEMADD_SIZE_8BIT,
             &data,
             1,
-            HAL_MAX_DELAY);
+            500);
 
         xSemaphoreGive(gI2c1Mutex);
     }
@@ -55,12 +51,12 @@ HAL_StatusTypeDef read(uint8_t regAddress, uint8_t *out, int length)
     {
         status = HAL_I2C_Mem_Read(
             &hi2c1,
-            MAG_ADDRESS,
+            MAG_ADDRESS << 1,
             regAddress,
             I2C_MEMADD_SIZE_8BIT,
             out,
             length,
-            HAL_MAX_DELAY);
+            500);
 
         xSemaphoreGive(gI2c1Mutex);
     }
@@ -110,8 +106,8 @@ HAL_StatusTypeDef magInit(void)
         return status;
     }
 
-    // enable SR and ddry
-    status = write(MAG_CTRL_REG_0, ctrlReg0 | 0x24);
+    // enable SR
+    status = write(MAG_CTRL_REG_0, ctrlReg0 | 0x20);
     if (status != HAL_OK)
     {
         return status;
@@ -139,8 +135,8 @@ HAL_StatusTypeDef magInit(void)
         return status;
     }
 
-    // Enable auto SR, enable CMM_EN
-    status = write(MAG_CTRL_REG_2, ctrlReg2 | 0x9E);
+    // Keep sensor in manual/singleshot
+    status = write(MAG_CTRL_REG_2, ctrlReg2 | 0x08);
     if (status != HAL_OK)
     {
         return status;
@@ -277,10 +273,6 @@ HAL_StatusTypeDef getData(uint32_t res[3])
  * @brief  Performs a full SET/RESET measurement cycle.
  * @param  magDataReadySemaphore: Semaphore handle to wait on for DDRY interrupt.
  * @param  magData: A 3-element array [X, Y, Z] to store final data in Gauss.
-/**
- * @brief  Performs a full SET/RESET measurement cycle.
- * @param  magData: A 3-element array [X, Y, Z] to store final data in Gauss.
- * @retval HAL_StatusTypeDef: HAL_OK on success, HAL_ERROR/HAL_TIMEOUT on failure.
  */
 HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float *magData)
 {
@@ -300,7 +292,7 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float *mag
         return status;
 
     // 3. Wait for DDRY interrupt
-    if (xSemaphoreTake(magDataReadySemaphore, portMAX_DELAY) != pdTRUE)
+    if (xSemaphoreTake(magDataReadySemaphore, 100) != pdTRUE)
     {
         return HAL_TIMEOUT;
     }
@@ -330,7 +322,7 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float *mag
         return status;
 
     // 8. Wait for DDRY interrupt
-    if (xSemaphoreTake(gMagDataReadySemaphore, portMAX_DELAY) != pdTRUE)
+    if (xSemaphoreTake(magDataReadySemaphore, 100) != pdTRUE)
     {
         return HAL_TIMEOUT;
     }
@@ -352,9 +344,7 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float *mag
     // 11. Subtract two meas. and divide by 2
     for (int i = 0; i < 3; i++)
     {
-        float signed_lsb = ((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f;
-
-        magData[i] = signed_lsb / 16384.0f;
+        magData[i] = (((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f) / 16384.0f;
     }
 
     return HAL_OK;

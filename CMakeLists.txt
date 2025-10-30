@@ -43,6 +43,9 @@ add_link_options(${FPU_FLAGS})
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# add float support in printf lib
+target_link_options(Canards PRIVATE "-Wl,-u,_printf_float")
+
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 

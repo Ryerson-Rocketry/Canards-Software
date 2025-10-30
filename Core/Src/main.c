@@ -61,7 +61,6 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-SemaphoreHandle_t gI2c1Mutex;
 /* USER CODE END 0 */
 
 /**
@@ -97,10 +96,8 @@ int main(void)
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   MX_SPI3_Init();
-  MX_WWDG_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  gI2c1Mutex = xSemaphoreCreateMutex();
   /* USER CODE END 2 */
 
   /* Init scheduler */

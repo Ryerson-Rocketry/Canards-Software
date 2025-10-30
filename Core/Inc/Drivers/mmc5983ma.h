@@ -7,7 +7,7 @@
 #include "stm32f4xx_hal_def.h"
 
 
-#define MAG_ADDRESS 0x60 << 1
+#define MAG_ADDRESS 0x30
 #define MAG_CTRL_REG_0 0x09
 #define MAG_CTRL_REG_1 0x0A
 #define MAG_CTRL_REG_2 0x0B
