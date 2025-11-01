@@ -106,8 +106,8 @@ HAL_StatusTypeDef magInit(void)
         return status;
     }
 
-    // enable SR
-    status = write(MAG_CTRL_REG_0, ctrlReg0 | 0x20);
+    //  enable INT meas done
+    status = write(MAG_CTRL_REG_0, ctrlReg0 | 0x04);
     if (status != HAL_OK)
     {
         return status;
@@ -127,16 +127,8 @@ HAL_StatusTypeDef magInit(void)
         return status;
     }
 
-    // get internal ctrl reg 2
-    uint8_t ctrlReg2;
-    status = read(MAG_CTRL_REG_2, &ctrlReg2, 1);
-    if (status != HAL_OK)
-    {
-        return status;
-    }
-
     // Keep sensor in manual/singleshot
-    status = write(MAG_CTRL_REG_2, ctrlReg2 | 0x08);
+    status = write(MAG_CTRL_REG_2, 0x00);
     if (status != HAL_OK)
     {
         return status;
@@ -210,7 +202,7 @@ HAL_StatusTypeDef startMeas(void)
     if (status != HAL_OK)
         return status;
 
-    status = write(MAG_CTRL_REG_0, ctrlReg | 0x01);
+    status = write(MAG_CTRL_REG_0, ctrlReg | 0x01 | 0x04);
     return status;
 }
 
@@ -277,7 +269,6 @@ HAL_StatusTypeDef getData(uint32_t res[3])
 HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float *magData)
 {
     HAL_StatusTypeDef status;
-    bool isDone;
     uint32_t out1[3];
     uint32_t out2[3];
 
@@ -297,51 +288,33 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float *mag
         return HAL_TIMEOUT;
     }
 
-    // 4. Check Measurement is done
-    status = checkMeasComplete(&isDone);
-    if (status != HAL_OK)
-        return status;
-    if (!isDone)
-    {
-        return HAL_ERROR;
-    }
-
-    // 5. Get first measurement
+    // 4. Get first measurement
     status = getData(out1);
     if (status != HAL_OK)
         return status;
 
-    // 6. Perform reset op
+    // 5. Perform reset op
     status = resetOperation();
     if (status != HAL_OK)
         return status;
 
-    // 7. start mag meas
+    // 6. start mag meas
     status = startMeas();
     if (status != HAL_OK)
         return status;
 
-    // 8. Wait for DDRY interrupt
+    // 7. Wait for DDRY interrupt
     if (xSemaphoreTake(magDataReadySemaphore, 100) != pdTRUE)
     {
         return HAL_TIMEOUT;
     }
 
-    // 9. Check Measurement is done
-    status = checkMeasComplete(&isDone);
-    if (status != HAL_OK)
-        return status;
-    if (!isDone)
-    {
-        return HAL_ERROR;
-    }
-
-    // 10. Get second measurement
+    // 8. Get second measurement
     status = getData(out2);
     if (status != HAL_OK)
         return status;
 
-    // 11. Subtract two meas. and divide by 2
+    // 9. Subtract two meas. and divide by 2
     for (int i = 0; i < 3; i++)
     {
         magData[i] = (((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f) / 16384.0f;

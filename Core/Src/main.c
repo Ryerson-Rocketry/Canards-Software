@@ -23,7 +23,6 @@
 #include "i2c.h"
 #include "spi.h"
 #include "usart.h"
-#include "wwdg.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
