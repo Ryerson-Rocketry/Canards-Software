@@ -26,7 +26,7 @@ const osThreadAttr_t defaultTask_attributes = {
 
 const osThreadAttr_t retrieveOrientation_attributes = {
     .name = "getOrientation",
-    .stack_size = 128 * 4,
+    .stack_size = 512 * 4,
     .priority = (osPriority_t)osPriorityRealtime,
 };
 
@@ -51,14 +51,13 @@ void StartDefaultTask()
 {
   for (;;)
   {
-    osDelay(1);
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    osDelay(10);
   }
 }
 
 void calculateOrientation()
 {
-
-  // needs to be changed to input it into Madgwick filter
 
   float accelData[4];
   float gyroData[4];
