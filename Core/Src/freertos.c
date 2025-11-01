@@ -20,7 +20,7 @@ SemaphoreHandle_t gI2c1Mutex;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
-    .stack_size = 1024 * 4,
+    .stack_size = 1024 * 8,
     .priority = (osPriority_t)osPriorityNormal,
 };
 
@@ -65,6 +65,7 @@ void StartDefaultTask(void *argument)
       osDelay(100);
     }
   }
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   for (;;)
   {
@@ -91,13 +92,14 @@ void StartDefaultTask(void *argument)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  // flag to see if there is a higher priority task
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   if (GPIO_Pin == MAG_PIN_INT)
   {
-    // if there is a higher priority task, xHigherPriorityTaskWoken becomes true
     xSemaphoreGiveFromISR(xMagDataReadySemaphore, &xHigherPriorityTaskWoken);
-    // if higher priority task, switch to it after interrupt is done
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+
+    if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING)
+    {
+      portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
   }
 }
