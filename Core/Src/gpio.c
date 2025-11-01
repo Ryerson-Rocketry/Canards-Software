@@ -33,12 +33,12 @@
 /* USER CODE END 1 */
 
 /** Configure pins as
- * Analog
- * Input
- * Output
- * EVENT_OUT
- * EXTI
- */
+        * Analog
+        * Input
+        * Output
+        * EVENT_OUT
+        * EXTI
+*/
 void MX_GPIO_Init(void)
 {
 
@@ -75,6 +75,7 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+
 }
 
 /* USER CODE BEGIN 2 */
