@@ -8,9 +8,6 @@
 #include "string.h"
 #include "stdio.h"
 
-#define GPIO_PIN_ACC_INT GPIO_PIN_ACC_INT_VAL
-#define GPIO_PIN_GYRO_INT GPIO_PIN_GYRO_INT_VAL
-
 // Semaphores
 SemaphoreHandle_t xImuDataReadySemaphore;
 
@@ -26,7 +23,7 @@ const osThreadAttr_t defaultTask_attributes = {
 
 const osThreadAttr_t retrieveOrientation_attributes = {
     .name = "getOrientation",
-    .stack_size = 512 * 4,
+    .stack_size = 2048 * 4,
     .priority = (osPriority_t)osPriorityRealtime,
 };
 
@@ -37,13 +34,13 @@ void calculateOrientation();
 void MX_FREERTOS_Init(void)
 {
 
-  bmi088Init();
   osDelay(1);
 
   xImuDataReadySemaphore = xSemaphoreCreateBinary();
   configASSERT(xImuDataReadySemaphore);
 
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  retrieveOrientationTaskHandle = osThreadNew(calculateOrientation, NULL, &retrieveOrientation_attributes);
 }
 
 // Default task function
@@ -51,7 +48,6 @@ void StartDefaultTask()
 {
   for (;;)
   {
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
     osDelay(10);
   }
 }
@@ -64,6 +60,21 @@ void calculateOrientation()
 
   char uartBuf[100];
 
+  HAL_StatusTypeDef init_status = bmi088Init();
+
+  if (init_status != HAL_OK)
+  {
+    // Initialization FAILED.
+    // Blink the LED very fast to tell us something is wrong.
+    while (1)
+    {
+      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      osDelay(50); // Fast error blink
+    }
+  }
+
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
   for (;;)
   {
 
@@ -73,27 +84,27 @@ void calculateOrientation()
       continue;
     }
 
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
     bmi088ReadAccelerometer(accelData);
     bmi088ReadGyroscope(gyroData);
 
     snprintf(uartBuf, sizeof(uartBuf),
              "Accel: %.2f, %.2f, %.2f\r\nGyro: %.2f, %.2f, %.2f\r\n",
              accelData[1], accelData[2], accelData[3], gyroData[1], gyroData[2], gyroData[3]);
-    HAL_UART_Transmit(&huart2, (uint8_t *)uartBuf, strlen(uartBuf), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, (uint8_t *)uartBuf, strlen(uartBuf), 100);
 
-    osDelay(1);
+    osDelay(10);
   }
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  // flag to see if there is a higher priority task
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  if (GPIO_Pin == GPIO_PIN_ACC_INT || GPIO_Pin == GPIO_PIN_GYRO_INT)
+
+  if (GPIO_Pin == Accelerometer_INT_Pin || GPIO_Pin == Gyroscope_INT_Pin)
   {
-    // if there is a higher priority task, xHigherPriorityTaskWoken becomes true
     xSemaphoreGiveFromISR(xImuDataReadySemaphore, &xHigherPriorityTaskWoken);
-    // if higher priority task, switch to it after interrupt is done
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
 }

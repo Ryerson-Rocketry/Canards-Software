@@ -43,19 +43,17 @@
 #define BMI088_ACC_INT_PIN_CONFIG_VAL 0x0A
 #define BMI088_ACC_INT_MAP_PIN_VAL 0x42
 
-// CS Pins (need to be changed)
-#define ACCEL_CS_GPIO_PORT GPIOA
-#define ACCEL_CS_GPIO_PIN GPIO_PIN_5
-#define GYRO_CS_GPIO_PORT GPIOA
-#define GYRO_CS_GPIO_PIN GPIO_PIN_0
+#define GYRO_CS_GPIO_PORT GPIOC
+#define GYRO_CS_GPIO_PIN GPIO_PIN_6
+#define ACCEL_CS_GPIO_PORT GPIOB
+#define ACCEL_CS_GPIO_PIN GPIO_PIN_15
 
-// Sensor INT pins (needs to be changed)
-#define GPIO_PIN_ACC_INT_VAL GPIO_PIN_0
-#define GPIO_PIN_GYRO_INT_VAL GPIO_PIN_1
+#define GPIO_PIN_ACC_INT_VAL GPIO_PIN_13
+#define GPIO_PIN_GYRO_INT_VAL GPIO_PIN_14
 
 #define GYRO_SOFTRESET true
 #define ACCEL_SOFTRESET true
 
-void bmi088Init();
+HAL_StatusTypeDef bmi088Init();
 void bmi088ReadAccelerometer(float out[4]);
 void bmi088ReadGyroscope(float out[4]);
