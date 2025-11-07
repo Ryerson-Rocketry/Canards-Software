@@ -59,6 +59,7 @@ void MX_SPI2_Init(void)
   /* USER CODE BEGIN SPI2_Init 2 */
 
   /* USER CODE END SPI2_Init 2 */
+
 }
 /* SPI3 init function */
 void MX_SPI3_Init(void)
@@ -90,17 +91,18 @@ void MX_SPI3_Init(void)
   /* USER CODE BEGIN SPI3_Init 2 */
 
   /* USER CODE END SPI3_Init 2 */
+
 }
 
-void HAL_SPI_MspInit(SPI_HandleTypeDef *spiHandle)
+void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
 {
 
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  if (spiHandle->Instance == SPI2)
+  if(spiHandle->Instance==SPI2)
   {
-    /* USER CODE BEGIN SPI2_MspInit 0 */
+  /* USER CODE BEGIN SPI2_MspInit 0 */
 
-    /* USER CODE END SPI2_MspInit 0 */
+  /* USER CODE END SPI2_MspInit 0 */
     /* SPI2 clock enable */
     __HAL_RCC_SPI2_CLK_ENABLE();
 
@@ -149,17 +151,17 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *spiHandle)
       Error_Handler();
     }
 
-    __HAL_LINKDMA(spiHandle, hdmarx, hdma_spi2_rx);
+    __HAL_LINKDMA(spiHandle,hdmarx,hdma_spi2_rx);
 
-    /* USER CODE BEGIN SPI2_MspInit 1 */
+  /* USER CODE BEGIN SPI2_MspInit 1 */
 
-    /* USER CODE END SPI2_MspInit 1 */
+  /* USER CODE END SPI2_MspInit 1 */
   }
-  else if (spiHandle->Instance == SPI3)
+  else if(spiHandle->Instance==SPI3)
   {
-    /* USER CODE BEGIN SPI3_MspInit 0 */
+  /* USER CODE BEGIN SPI3_MspInit 0 */
 
-    /* USER CODE END SPI3_MspInit 0 */
+  /* USER CODE END SPI3_MspInit 0 */
     /* SPI3 clock enable */
     __HAL_RCC_SPI3_CLK_ENABLE();
 
@@ -177,7 +179,7 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *spiHandle)
     GPIO_InitStruct.Alternate = GPIO_AF7_SPI3;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = GPIO_PIN_10 | GPIO_PIN_11;
+    GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -201,22 +203,22 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *spiHandle)
       Error_Handler();
     }
 
-    __HAL_LINKDMA(spiHandle, hdmarx, hdma_spi3_rx);
+    __HAL_LINKDMA(spiHandle,hdmarx,hdma_spi3_rx);
 
-    /* USER CODE BEGIN SPI3_MspInit 1 */
+  /* USER CODE BEGIN SPI3_MspInit 1 */
 
-    /* USER CODE END SPI3_MspInit 1 */
+  /* USER CODE END SPI3_MspInit 1 */
   }
 }
 
-void HAL_SPI_MspDeInit(SPI_HandleTypeDef *spiHandle)
+void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
 {
 
-  if (spiHandle->Instance == SPI2)
+  if(spiHandle->Instance==SPI2)
   {
-    /* USER CODE BEGIN SPI2_MspDeInit 0 */
+  /* USER CODE BEGIN SPI2_MspDeInit 0 */
 
-    /* USER CODE END SPI2_MspDeInit 0 */
+  /* USER CODE END SPI2_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_SPI2_CLK_DISABLE();
 
@@ -225,21 +227,21 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef *spiHandle)
     PC2     ------> SPI2_MISO
     PB10     ------> SPI2_SCK
     */
-    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_1 | GPIO_PIN_2);
+    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_1|GPIO_PIN_2);
 
     HAL_GPIO_DeInit(GPIOB, GPIO_PIN_10);
 
     /* SPI2 DMA DeInit */
     HAL_DMA_DeInit(spiHandle->hdmarx);
-    /* USER CODE BEGIN SPI2_MspDeInit 1 */
+  /* USER CODE BEGIN SPI2_MspDeInit 1 */
 
-    /* USER CODE END SPI2_MspDeInit 1 */
+  /* USER CODE END SPI2_MspDeInit 1 */
   }
-  else if (spiHandle->Instance == SPI3)
+  else if(spiHandle->Instance==SPI3)
   {
-    /* USER CODE BEGIN SPI3_MspDeInit 0 */
+  /* USER CODE BEGIN SPI3_MspDeInit 0 */
 
-    /* USER CODE END SPI3_MspDeInit 0 */
+  /* USER CODE END SPI3_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_SPI3_CLK_DISABLE();
 
@@ -250,13 +252,13 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef *spiHandle)
     */
     HAL_GPIO_DeInit(GPIOB, GPIO_PIN_0);
 
-    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_10 | GPIO_PIN_11);
+    HAL_GPIO_DeInit(GPIOC, GPIO_PIN_10|GPIO_PIN_11);
 
     /* SPI3 DMA DeInit */
     HAL_DMA_DeInit(spiHandle->hdmarx);
-    /* USER CODE BEGIN SPI3_MspDeInit 1 */
+  /* USER CODE BEGIN SPI3_MspDeInit 1 */
 
-    /* USER CODE END SPI3_MspDeInit 1 */
+  /* USER CODE END SPI3_MspDeInit 1 */
   }
 }
 
