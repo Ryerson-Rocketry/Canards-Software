@@ -2,8 +2,8 @@
 #include "projdefs.h"
 #include "task.h"
 #include "main.h"
-#include "cmsis_os.h"
 #include "Drivers/ms5611.h"
+#include "cmsis_os2.h"
 
 // Task handle and attributes
 osThreadId_t defaultTaskHandle;
@@ -11,7 +11,7 @@ osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
     .stack_size = 512 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+    .priority = osPriorityNormal,
 };
 
 void StartDefaultTask(void *argument);
@@ -42,7 +42,7 @@ void StartDefaultTask(void *argument)
     {
       break;
     }
-    osDelay(pdMS_TO_TICKS(100));
+    osDelay(100);
   } while (status != HAL_OK);
 
   if (status != HAL_OK)
@@ -50,7 +50,7 @@ void StartDefaultTask(void *argument)
     for (;;)
     {
       HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-      osDelay(pdMS_TO_TICKS(100)); // Fast error blink
+      osDelay(100); // Fast error blink
     }
   }
 
