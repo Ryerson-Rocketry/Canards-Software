@@ -113,7 +113,8 @@ This project is set up for an easy, one-click workflow.
      * `./build.sh Release` (Builds the optimized release `.elf` file)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-### Prerequisites
+
+## Prerequisites
 To build and debug this project, you need the following software installed and added to your system's `PATH`.
 
 1.  **ARM Toolchain (`arm-none-eabi-gcc`)**
