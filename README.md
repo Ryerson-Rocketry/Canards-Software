@@ -72,7 +72,7 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-This repository contains the complete firmware and embedded software stack for an STM32-based control canard system, designed for active in-flight stabilization and trajectory correction on high-powered rockets.
+This repository contains the complete avionics firmware for Project Canards, developed by the Control Systems subteam for the MetRocketry student design team. This high-performance flight control system is built on the STM32F446RE microcontroller and is designed to provide active canard stabilization and real-time trajectory correction for high-powered rocketry, running on a lightweight FreeRTOS kernel for deterministic, multi-threaded task management.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -90,11 +90,50 @@ This repository contains the complete firmware and embedded software stack for a
 <!-- GETTING STARTED -->
 ## Getting Started
 <!-- TODO: Write how to run this project -->
-WIP
+This project is set up for an easy, one-click workflow.
 
+1. **Install Prerequisites**
+
+   * Download and install all the software listed in the "Prerequisites" section below.
+
+2. **Set Up Your Path**
+
+   * **This is a crucial step!** You must add the `bin` folders for `arm-none-eabi-gcc` and `openocd` to your system's Environment Variables (PATH).
+
+   * **Verify:** You can check this by opening a **new** terminal and typing `arm-none-eabi-gcc --version` and `openocd --version`. You should see version info, not a "command not found" error.
+
+3. **Build & Debug**
+
+   * **VS Code (Recommended):** Open this folder in VS Code, connect your ST-Link, and press **F5**. The `preLaunchTask` will automatically run the `build.sh` script and start the debugger.
+
+   * **Manual (Terminal):**
+
+     * `./build.sh Debug` (Builds the debug `.elf` file)
+
+     * `./build.sh Release` (Builds the optimized release `.elf` file)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 ### Prerequisites
-<!-- TODO: Find out what is needed to run this project locally -->
-WIP
+To build and debug this project, you need the following software installed and added to your system's `PATH`.
+
+1.  **ARM Toolchain (`arm-none-eabi-gcc`)**
+    * **What it is:** Provides the `gcc` compiler, `gdb` debugger, and other tools to build for an ARM chip.
+    * **Where to get it:** [ARM GNU Toolchain Downloads](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads)
+
+2.  **OpenOCD (Open On-Chip Debugger)**
+    * **What it is:** The GDB server software that connects to your ST-Link hardware probe.
+    * **Where to get it:** [xPack OpenOCD Releases](https://github.com/xpack-dev-tools/openocd-xpack/releases) (Recommended to get the pre-compiled binaries, *not* the source code).
+
+3.  **VS Code + Cortex-Debug Extension**
+    * **What it is:** Your code editor and the extension that understands how to talk to OpenOCD and GDB.
+    * **Where to get it:**
+        * [Visual Studio Code](https://code.visualstudio.com/)
+        * [Cortex-Debug Extension](https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug)
+
+4.  **Bash Shell** (For `build.sh`)
+    * **Windows:** Automatically included with [Git for Windows](https://git-scm.com/install/windows) (as "Git Bash").
+    * **macOS / Linux:** Included by default.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- ROADMAP -->
 ## Roadmap
@@ -120,7 +159,7 @@ WIP
 
 <!-- CONTACT -->
 ## Contact
-Contact MetRocketry </br>
+Contact MetRocketry: [https://www.metrocketry.com/](https://www.metrocketry.com/) </br>
 Project Link: [https://github.com/Ryerson-Rocketry/Canards-Software](https://github.com/Ryerson-Rocketry/Canards-Software)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -131,7 +170,7 @@ Project Link: [https://github.com/Ryerson-Rocketry/Canards-Software](https://git
 ## Acknowledgments
 
 * [Madgwick, S. O. H. "An efficient orientation filter for inertial and inertial/magnetic sensor arrays." (2010)](https://courses.cs.washington.edu/courses/cse466/14au/labs/l4/madgwick_internal_report.pdf)  
-    - The original Madgwick filter algorithm paper, which we are using for attitude determination.
+    - The original Madgwick filter algorithm paper, for cool demonstration purposes 
 * [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template)  
     - For the README template.
     
