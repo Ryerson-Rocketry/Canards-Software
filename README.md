@@ -1,23 +1,4 @@
-<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a id="readme-top"></a>
-<!--
-*** Thanks for checking out the Best-README-Template. If you have a suggestion
-*** that would make this better, please fork the repo and create a pull request
-*** or simply open an issue with the tag "enhancement".
-*** Don't forget to give the project a star!
-*** Thanks again! Now go create something AMAZING! :D
--->
-
-
-
-<!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -25,162 +6,182 @@
 [![project_license][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
 
+---
 
-
-<!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
-    <img src="MetRocketry_Logo.png" alt="Logo" width="80" height="80">
-  </a>
+  <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
+    <img src="MetRocketry_Logo.png" alt="Logo" width="90" height="90">
+  </a>
 
-<h3 align="center">Canards Software</h3>
+<h3 align="center">Canards Avionics Firmware</h3>
 
-  <p align="center">
-    The firmware code for the Canards
-    <br />
-  </p>
+  <p align="center">
+    **High-Performance Active Stabilization for High-Powered Launch Vehicles.**
+    <br />
+    The flight control system built on STM32F446RE and FreeRTOS.
+    <br />
+    <a href="https://github.com/Ryerson-Rocketry/Canards-Software/issues">Report Bug</a>
+    ·
+    <a href="https://github.com/Ryerson-Rocketry/Canards-Software/issues">Request Feature</a>
+  </p>
 </div>
 
+---
 
-
-<!-- TABLE OF CONTENTS -->
 <details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
-  </ol>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#key-features">Key Features</a></li>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#build--debug-steps">Build & Debug Steps</a></li>
+      </ul>
+    </li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
 </details>
 
+---
 
+## 🚀 About The Project
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
-This repository contains the complete avionics firmware for Canards, developed by the Control Systems subteam for the MetRocketry student design team. This high-performance flight control system is built on the STM32F446RE microcontroller and is designed to provide active canard stabilization and real-time trajectory correction for high-powered rocketry, running on a lightweight FreeRTOS kernel for deterministic, multi-threaded task management.
+This repository contains the complete avionics firmware for the **Canards** flight vehicle, developed by the Control Systems subteam of MetRocketry student design team.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+The system is engineered for reliable, high-speed control, utilizing the computational power of the **STM32F446RE** microcontroller. It is designed to provide active canard stabilization and real-time trajectory correction, ensuring mission success in high-powered rocketry flights.
 
-### Built With
+### ✨ Key Features
 
-* ![STM32](https://img.shields.io/badge/MCU-STM32-blue?logo=STMicroelectronics&logoColor=white)  
-* ![C](https://img.shields.io/badge/Language-C-blue?logo=c&logoColor=white)
-* ![C++](https://img.shields.io/badge/Language-C++-00599C?logo=c%2B%2B&logoColor=white)
-* ![FreeRTOS](https://img.shields.io/badge/RTOS-FreeRTOS-5ebc28?logo=freertos&logoColor=white)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- GETTING STARTED -->
-## Getting Started
-<!-- TODO: Write how to run this project -->
-This project is set up for an easy, one-click workflow.
-
-1. **Install Prerequisites**
-
-   * Download and install all the software listed in the "Prerequisites" section below.
-
-2. **Set Up Your Path**
-
-   * **This is a crucial step!** You must add the `bin` folders for `arm-none-eabi-gcc` and `openocd` to your system's Environment Variables (PATH).
-
-   * **Verify:** You can check this by opening a **new** terminal and typing `arm-none-eabi-gcc --version` and `openocd --version`. You should see version info, not a "command not found" error.
-
-3. **Build & Debug**
-
-   * **VS Code (Recommended):** Open this folder in VS Code, connect your ST-Link, and press **F5**. The `preLaunchTask` will automatically run the `build.sh` script and start the debugger.
-
-   * **Manual (Terminal):**
-
-     * `./build.sh Debug` (Builds the debug `.elf` file)
-
-     * `./build.sh Release` (Builds the optimized release `.elf` file)
+| Feature | Description |
+| :--- | :--- |
+| **Complete 3-Axis Stabilization** | Provides stabilization across **Roll** axes for comprehensive flight control and disturbance rejection. |
+| **Active Roll Control** | Implements high-frequency control to maintain a precise target roll angle (typically $0^\circ$), actively mitigating roll-induced coupling. |
+| **High-Fidelity PID Control** | Utilizes a robust **Proportional-Integral-Derivative (PID) control algorithm** for closed-loop stability, guaranteeing rapid response and minimal steady-state error. |
+| **Deterministic RTOS** | Built on a lightweight **FreeRTOS** kernel, ensuring deterministic and reliable execution of time-critical tasks (sensor fusion, state estimation, and control). |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## Prerequisites
-To build and debug this project, you need the following software installed and added to your system's `PATH`.
+---
 
-1.  **ARM Toolchain (`arm-none-eabi-gcc`)**
-    * **What it is:** Provides the `gcc` compiler, `gdb` debugger, and other tools to build for an ARM chip.
-    * **Where to get it:** [ARM GNU Toolchain Downloads](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads)
+### 🛠️ Built With
 
-2.  **OpenOCD (Open On-Chip Debugger)**
-    * **What it is:** The GDB server software that connects to your ST-Link hardware probe.
-    * **Where to get it:** [xPack OpenOCD Releases](https://github.com/xpack-dev-tools/openocd-xpack/releases) (Recommended to get the pre-compiled binaries, *not* the source code).
+| Component | Description | Technologies |
+| :--- | :--- | :--- |
+| **Microcontroller** | Core flight control processor. | **STM32F446RE** (Cortex-M4) <br> ![STM32](https://img.shields.io/badge/MCU-STM32-blue?logo=STMicroelectronics&logoColor=white) |
+| **RTOS** | Provides deterministic multi-threaded task management. | **FreeRTOS** <br> ![FreeRTOS](https://img.shields.io/badge/RTOS-FreeRTOS-5ebc28?logo=freertos&logoColor=white) |
+| **Languages** | Primary development languages. | **C / C++** <br> ![C](https://img.shields.io/badge/Language-C-blue?logo=c&logoColor=white)   ![C++](https://img.shields.io/badge/Language-C++-00599C?logo=c%2B%2B&logoColor=white) |
+| **Toolchain** | Compiler and build system. | GCC/Make-based system. |
+| **Configuration** | Hardware initialization setup. | STM32CubeMX (`.ioc` file). |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+## 🛠️ Getting Started
+
+This section outlines the setup required to successfully build, flash, and debug the firmware.
+
+### 🌱 Prerequisites
+
+To build and debug this project, you need the following software installed and their executable paths configured in your system's **PATH** environment variable.
+
+1.  **ARM GNU Toolchain** (`arm-none-eabi-gcc`)
+    * **Purpose:** The cross-compiler and linker suite for the ARM architecture.
+    * **Download:** [ARM GNU Toolchain Downloads](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads)
+
+2.  **OpenOCD** (Open On-Chip Debugger)
+    * **Purpose:** The GDB server software that bridges the debugger with the hardware probe (e.g., ST-Link).
+    * **Download:** [xPack OpenOCD Releases](https://github.com/xpack-dev-tools/openocd-xpack/releases) (Recommended Pre-compiled Binaries)
 
 3.  **VS Code + Cortex-Debug Extension**
-    * **What it is:** Your code editor and the extension that understands how to talk to OpenOCD and GDB.
-    * **Where to get it:**
-        * [Visual Studio Code](https://code.visualstudio.com/)
-        * [Cortex-Debug Extension](https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug)
+    * **Purpose:** Recommended IDE and debugging extension for embedded development.
+    * **Download:** [Visual Studio Code](https://code.visualstudio.com/) and [Cortex-Debug Extension](https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug)
 
-4.  **Bash Shell** (For `build.sh`)
-    * **Windows:** Automatically included with [Git for Windows](https://git-scm.com/install/windows) (as "Git Bash").
-    * **macOS / Linux:** Included by default.
+4.  **Bash Shell**
+    * **Purpose:** Required to execute the `./build.sh` and `./run.sh` scripts.
+    * **Note:** Included by default on macOS/Linux. On Windows, use **Git Bash** (included with [Git for Windows](https://git-scm.com/install/windows)).
+
+### 🫡 Build & Debug Steps
+
+This project is set up for an easy, one-click workflow within VS Code.
+
+1.  **Verify PATH:** Open a **new** terminal and ensure the toolchain is accessible:
+    ```bash
+    arm-none-eabi-gcc --version
+    openocd --version
+    ```
+2.  **Connect Hardware:** Plug in your **ST-Link/J-Link** probe to the development board.
+3.  **VS Code (Recommended):**
+    * Open this repository folder in VS Code.
+    * Go to the Run and Debug view (F5).
+    * Press **F5**. The configured `preLaunchTask` will automatically run `./build.sh Debug` and launch the debugger.
+4.  **Manual (Terminal):**
+    * To build the final binary: `./build.sh Release`
+    * To build and enable debugging symbols: `./build.sh Debug`
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-<!-- ROADMAP -->
-## Roadmap
-<!-- TODO: Come up with a road map for this project -->
-WIP
+---
 
-<!-- CONTRIBUTING -->
-## Contributing
+## 🗺️ Roadmap
+* Implement Kalman filter for altitude and velocity determination.
+* Integrate data logging to external SD card.
+* Develop robust flight simulation and hardware-in-the-loop (HIL) testing environment.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+## 🤝 Contributing
+
+Contributions make the rocketry world go 'round! If you have suggestions or find bugs, please fork the repo and create a pull request.
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+3. Commit your Changes (`git commit -m 'feat: Add Amazing Feature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-### Top contributors:
-
+### Top Contributors:
 <a href="https://github.com/Ryerson-Rocketry/Canards-Software/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Ryerson-Rocketry/Canards-Software" alt="contrib.rocks image" />
+  <img src="https://contrib.rocks/image?repo=Ryerson-Rocketry/Canards-Software" alt="contrib.rocks image" />
 </a>
 
-<!-- CONTACT -->
-## Contact
-Contact MetRocketry: [https://www.metrocketry.com/](https://www.metrocketry.com/) </br>
-Project Link: [https://github.com/Ryerson-Rocketry/Canards-Software](https://github.com/Ryerson-Rocketry/Canards-Software)
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+## 📧 Contact
+
+MetRocketry Team Website: [https://www.metrocketry.com/](https://www.metrocketry.com/) <br/>
+Project Repository: [https://github.com/Ryerson-Rocketry/Canards-Software](https://github.com/Ryerson-Rocketry/Canards-Software)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+---
 
+## 🏆 Acknowledgments
 
-<!-- ACKNOWLEDGMENTS -->
-## Acknowledgments
-
-* [Madgwick, S. O. H. "An efficient orientation filter for inertial and inertial/magnetic sensor arrays." (2010)](https://courses.cs.washington.edu/courses/cse466/14au/labs/l4/madgwick_internal_report.pdf)  
-    - The original Madgwick filter algorithm paper, for cool demonstration purposes 
-* [othneildrew/Best-README-Template](https://github.com/othneildrew/Best-README-Template)  
-    - For the README template.
+* [**Madgwick, S. O. H. (2010). An efficient orientation filter for inertial and inertial/magnetic sensor arrays.**](https://courses.cs.washington.edu/courses/cse466/14au/labs/l4/madgwick_internal_report.pdf) <br/>
+    *Used as a foundational reference for state estimation.*
+* [**othneildrew/Best-README-Template**](https://github.com/othneildrew/Best-README-Template) <br/>
+    *For providing the clean and structured Markdown template.*
     
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+---
 
-
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/Ryerson-Rocketry/Canards-Software.svg?style=for-the-badge
 [contributors-url]: https://github.com/Ryerson-Rocketry/Canards-Software/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/Ryerson-Rocketry/Canards-Software.svg?style=for-the-badge
