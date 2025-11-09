@@ -72,7 +72,7 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-This repository contains the complete avionics firmware for Project Canards, developed by the Control Systems subteam for the MetRocketry student design team. This high-performance flight control system is built on the STM32F446RE microcontroller and is designed to provide active canard stabilization and real-time trajectory correction for high-powered rocketry, running on a lightweight FreeRTOS kernel for deterministic, multi-threaded task management.
+This repository contains the complete avionics firmware for Canards, developed by the Control Systems subteam for the MetRocketry student design team. This high-performance flight control system is built on the STM32F446RE microcontroller and is designed to provide active canard stabilization and real-time trajectory correction for high-powered rocketry, running on a lightweight FreeRTOS kernel for deterministic, multi-threaded task management.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
