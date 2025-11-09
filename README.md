@@ -31,7 +31,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
-    <img src="public/MetRocketry_Logo.png" alt="Logo" width="80" height="80">
+    <img src="MetRocketry_Logo.png" alt="Logo" width="80" height="80">
   </a>
 
 <h3 align="center">Canards Software</h3>
