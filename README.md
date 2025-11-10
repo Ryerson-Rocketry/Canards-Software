@@ -192,5 +192,5 @@ Project Repository: [https://github.com/Ryerson-Rocketry/Canards-Software](https
 [issues-url]: https://github.com/Ryerson-Rocketry/Canards-Software/issues
 [license-shield]: https://img.shields.io/badge/license-Unlicensed-red?style=for-the-badge&logo=gitea
 [license-url]: https://github.com/Ryerson-Rocketry/Canards-Software/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/LinkedIn-MetRocketry-blue.svg?style=for-the-badge&logo=linkedin&logoColor=white
-[linkedin-url]: https://linkedin.com/in/metrocketry
+[linkedin-shield]: https://img.shields.io/badge/LinkedIn-blue.svg?style=for-the-badge&logo=linkedin&logoColor=white
+[linkedin-url]: [https://linkedin.com/in/metrocketry](https://www.linkedin.com/company/metrocketry/)
