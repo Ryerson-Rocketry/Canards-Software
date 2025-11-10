@@ -11,7 +11,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
-    <img src="MetRocketry_Logo.png" alt="Logo" width="90" height="90">
+    <img src="MetRocketry_Logo.png" alt="Logo" width="180" height="180">
   </a>
 
 <h3 align="center">Canards Avionics Firmware</h3>
