@@ -153,7 +153,7 @@ Contributions make the rocketry world go 'round! If you have suggestions or find
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-### Top Contributors:
+### 💖 Top Contributors:
 <a href="https://github.com/Ryerson-Rocketry/Canards-Software/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Ryerson-Rocketry/Canards-Software" alt="contrib.rocks image" />
 </a>
@@ -190,7 +190,7 @@ Project Repository: [https://github.com/Ryerson-Rocketry/Canards-Software](https
 [stars-url]: https://github.com/Ryerson-Rocketry/Canards-Softwarestargazers
 [issues-shield]: https://img.shields.io/github/issues/Ryerson-Rocketry/Canards-Software.svg?style=for-the-badge
 [issues-url]: https://github.com/Ryerson-Rocketry/Canards-Software/issues
-[license-shield]: https://img.shields.io/github/license/Ryerson-Rocketry/Canards-Software.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/badge/license-Unlicensed-red?style=for-the-badge&logo=gitea
 [license-url]: https://github.com/Ryerson-Rocketry/Canards-Software/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
+[linkedin-shield]: https://img.shields.io/badge/LinkedIn-MetRocketry-blue.svg?style=for-the-badge&logo=linkedin&logoColor=white
 [linkedin-url]: https://linkedin.com/in/metrocketry
