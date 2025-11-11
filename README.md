@@ -145,9 +145,9 @@ This project is set up for an easy, one-click workflow within VS Code.
 
 ## 🤝 Contributing
 
-Contributions make the rocketry world go 'round! If you have suggestions or find bugs, please fork the repo and create a pull request.
+Contributions make the rocketry world go 'round! If you have suggestions or find bugs, please clone the repo and create a pull request.
 
-1. Fork the Project
+1. Clone the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
 3. Commit your Changes (`git commit -m 'feat: Add Amazing Feature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
