@@ -22,32 +22,31 @@
 #define __WWDG_H__
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f4xx_hal_wwdg.h"
 
-    /* USER CODE BEGIN Includes */
+/* USER CODE BEGIN Includes */
 
-    /* USER CODE END Includes */
+/* USER CODE END Includes */
 
-    extern WWDG_HandleTypeDef hwwdg;
+extern WWDG_HandleTypeDef hwwdg;
 
-    /* USER CODE BEGIN Private defines */
+/* USER CODE BEGIN Private defines */
 
-    /* USER CODE END Private defines */
+/* USER CODE END Private defines */
 
-    void MX_WWDG_Init(void);
+void MX_WWDG_Init(void);
 
-    /* USER CODE BEGIN Prototypes */
+/* USER CODE BEGIN Prototypes */
 
-    /* USER CODE END Prototypes */
+/* USER CODE END Prototypes */
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* __WWDG_H__ */
+

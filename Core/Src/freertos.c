@@ -1,60 +1,65 @@
 #include "FreeRTOS.h"
+#include "projdefs.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
-#include "wwdg.h"
+#include "Drivers/ms5611.h"
 
 // Task handle and attributes
 osThreadId_t defaultTaskHandle;
-osThreadId_t refreshWatchdogHandle;
 
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
-    .stack_size = 128 * 4,
+    .stack_size = 512 * 4,
     .priority = (osPriority_t)osPriorityNormal,
 };
 
-const osThreadAttr_t refereshWatchdog_Attributes = {
-    .name = "refershWatchdog",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t)osPriorityAboveNormal7,
-};
-
 void StartDefaultTask(void *argument);
-void RefreshWatchdog(void *argument);
 
 // FreeRTOS initialization
 void MX_FREERTOS_Init(void)
 {
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-  refreshWatchdogHandle = osThreadNew(RefreshWatchdog, NULL, &refereshWatchdog_Attributes);
 }
 
 // Default task function
 void StartDefaultTask(void *argument)
 {
-  for (;;)
+
+  uint16_t prom[8] = {0};
+  int32_t pressure = 0;
+  int32_t temperature = 0;
+  int counter = 0;
+  HAL_StatusTypeDef status = HAL_ERROR;
+
+  ms5611Reset();
+
+  do
   {
-    osDelay(1);
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-  }
-}
-
-void RefreshWatchdog(void *argument)
-{
-
-  for (;;)
-  {
-
-    //  formula for watchdog tiemr: (1/fhclk) * 4096 * Nwwdg_prescaler * (Nrefresh -Nwindow)
-    osDelay(10);
-
-    // Toggle LED to see if on
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-
-    if (HAL_WWDG_Refresh(&hwwdg) != HAL_OK)
+    status = ms5611ReadPROM(prom);
+    counter++;
+    if (counter == 10)
     {
-      Error_Handler();
+      break;
     }
+    osDelay(pdMS_TO_TICKS(100));
+  } while (status != HAL_OK);
+
+  if (status != HAL_OK)
+  {
+    for (;;)
+    {
+      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      osDelay(pdMS_TO_TICKS(100)); // Fast error blink
+    }
+  }
+
+  for (;;)
+  {
+    ms5611GetPressureAndTemp(prom, &pressure, &temperature);
+    osDelay(pdMS_TO_TICKS(250));
+
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    osDelay(pdMS_TO_TICKS(250));
   }
 }

@@ -30,7 +30,6 @@ target_sources(stm32cubemx INTERFACE
     ../../Core/Src/dma.c
     ../../Core/Src/spi.c
     ../../Core/Src/usart.c
-    ../../Core/Src/wwdg.c
     ../../Core/Src/stm32f4xx_it.c
     ../../Core/Src/stm32f4xx_hal_msp.c
     ../../Core/Src/stm32f4xx_hal_timebase_tim.c
@@ -51,7 +50,6 @@ target_sources(stm32cubemx INTERFACE
     ../../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c
     ../../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c
     ../../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
-    ../../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_wwdg.c
     ../../Core/Src/system_stm32f4xx.c
     ../../Middlewares/Third_Party/FreeRTOS/Source/croutine.c
     ../../Middlewares/Third_Party/FreeRTOS/Source/event_groups.c

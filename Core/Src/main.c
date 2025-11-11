@@ -22,7 +22,6 @@
 #include "dma.h"
 #include "spi.h"
 #include "usart.h"
-#include "wwdg.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -96,7 +95,6 @@ int main(void)
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   MX_SPI3_Init();
-  MX_WWDG_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
