@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "stm32f446xx.h": "c",
+        "freertos.h": "c",
+        "task.h": "c"
+    }
+}

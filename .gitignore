@@ -1,35 +1,33 @@
-/build/
+# Build artifacts
 /Debug/
 /Release/
-*.user
-*.launch
-*.log
-*.swp
-*.swo
-*.bak
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
 *.o
 *.d
-*.elf
-*.bin
-*.hex
-*.map
-*.list
-*.pyc
-*.DS_Store
-*.cproject
-*.project
+
+# IDE-specific files and settings
+.mxproject
 /.settings/
-EWARM/
+.project
+.cproject
+.launch
+.metadata/
+.toolchain/
 
-.vscode/settings.json
-.vscode/c_cpp_properties.json
-.vscode/*.log
-.env
+# CubeMX generated files (optional, depending on workflow)
+# If you regenerate code frequently and don't want to track changes in these, uncomment:
+# /Core/Src/main.c
+# /Core/Inc/main.h
+# /Core/Src/stm32fxxx_it.c
+# /Core/Inc/stm32fxxx_it.h
+# /Drivers/
 
-
-*.mxproject
-/build/
-/CMakeFiles/
-/CMakeCache.txt
-/cmake_install.cmake
-/compile_commands.json
+# Other temporary or user-specific files
+*.~
+*.bak
+*.swp
+*.log
