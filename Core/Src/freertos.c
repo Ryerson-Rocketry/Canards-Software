@@ -25,41 +25,9 @@ void MX_FREERTOS_Init(void)
 // Default task function
 void StartDefaultTask(void *argument)
 {
-
-  uint16_t prom[8] = {0};
-  int32_t pressure = 0;
-  int32_t temperature = 0;
-  int counter = 0;
-  HAL_StatusTypeDef status = HAL_ERROR;
-
-  ms5611Reset();
-
-  do
-  {
-    status = ms5611ReadPROM(prom);
-    counter++;
-    if (counter == 10)
-    {
-      break;
-    }
-    osDelay(pdMS_TO_TICKS(100));
-  } while (status != HAL_OK);
-
-  if (status != HAL_OK)
-  {
-    for (;;)
-    {
-      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-      osDelay(pdMS_TO_TICKS(100)); // Fast error blink
-    }
-  }
-
   for (;;)
   {
-    ms5611GetPressureAndTemp(prom, &pressure, &temperature);
-    osDelay(pdMS_TO_TICKS(250));
-
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    osDelay(pdMS_TO_TICKS(250));
+    osDelay(10);
   }
 }
