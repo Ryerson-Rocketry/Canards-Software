@@ -10,47 +10,47 @@
 
 <br />
 <div align="center">
-  <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
-    <img src="MetRocketry_Logo.png" alt="Logo" width="180" height="180">
-  </a>
+  <a href="https://github.com/Ryerson-Rocketry/Canards-Software">
+    <img src="MetRocketry_Logo.png" alt="Logo" width="180" height="180">
+  </a>
 
 <h3 align="center">Canards Avionics Firmware</h3>
 
-  <p align="center">
-    **High-Performance Active Stabilization for High-Powered Launch Vehicles.**
-    <br />
-    The flight control system built on STM32F446RE and FreeRTOS.
-    <br />
-    <a href="https://github.com/Ryerson-Rocketry/Canards-Software/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/Ryerson-Rocketry/Canards-Software/issues">Request Feature</a>
-  </p>
+  <p align="center">
+    **High-Performance Active Stabilization for High-Powered Launch Vehicles.**
+    <br />
+    The flight control system built on STM32F446RE and FreeRTOS.
+    <br />
+    <a href="https://github.com/Ryerson-Rocketry/Canards-Software/issues">Report Bug</a>
+    ·
+    <a href="https://github.com/Ryerson-Rocketry/Canards-Software/issues">Request Feature</a>
+  </p>
 </div>
 
 ---
 
 <details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#key-features">Key Features</a></li>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#build--debug-steps">Build & Debug Steps</a></li>
-      </ul>
-    </li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
-  </ol>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#key-features">Key Features</a></li>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#build--debug-steps">Build & Debug Steps</a></li>
+      </ul>
+    </li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
 </details>
 
 ---
@@ -80,7 +80,7 @@ The system is engineered for reliable, high-speed control, utilizing the computa
 | :--- | :--- | :--- |
 | **Microcontroller** | Core flight control processor. | **STM32F446RE** (Cortex-M4) <br> ![STM32](https://img.shields.io/badge/MCU-STM32-blue?logo=STMicroelectronics&logoColor=white) |
 | **RTOS** | Provides deterministic multi-threaded task management. | **FreeRTOS** <br> ![FreeRTOS](https://img.shields.io/badge/RTOS-FreeRTOS-5ebc28?logo=freertos&logoColor=white) |
-| **Languages** | Primary development languages. | **C / C++** <br> ![C](https://img.shields.io/badge/Language-C-blue?logo=c&logoColor=white)   ![C++](https://img.shields.io/badge/Language-C++-00599C?logo=c%2B%2B&logoColor=white) |
+| **Languages** | Primary development languages. | **C / C++** <br> ![C](https://img.shields.io/badge/Language-C-blue?logo=c&logoColor=white)   ![C++](https://img.shields.io/badge/Language-C++-00599C?logo=c%2B%2B&logoColor=white) |
 | **Toolchain** | Compiler and build system. | GCC/Make-based system. |
 | **Configuration** | Hardware initialization setup. | STM32CubeMX (`.ioc` file). |
 
@@ -98,35 +98,38 @@ To build and debug this project, you need the following software installed and t
 
 1.  **ARM GNU Toolchain** (`arm-none-eabi-gcc`)
     * **Purpose:** The cross-compiler and linker suite for the ARM architecture.
-    * **Download:** [ARM GNU Toolchain Downloads](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads)
+    * **Download:** [ARM GNU Toolchain Downloads](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-chain/downloads)
 
 2.  **OpenOCD** (Open On-Chip Debugger)
     * **Purpose:** The GDB server software that bridges the debugger with the hardware probe (e.g., ST-Link).
-    * **Download:** [xPack OpenOCD Releases](https://github.com/xpack-dev-tools/openocd-xpack/releases) (Recommended Pre-compiled Binaries)
+    * **Download:** [xPack OpenOCD Releases](https://github.com/xpack-dev-tools/openocd-xpack/releases)
 
 3.  **VS Code + Cortex-Debug Extension**
     * **Purpose:** Recommended IDE and debugging extension for embedded development.
-    * **Download:** [Visual Studio Code](https://code.visualstudio.com/) and [Cortex-Debug Extension](https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug)
 
 4.  **Bash Shell**
     * **Purpose:** Required to execute the `./build.sh` and `./run.sh` scripts.
-    * **Note:** Included by default on macOS/Linux. On Windows, use **Git Bash** (included with [Git for Windows](https://git-scm.com/install/windows)).
 
 ### 🫡 Build & Debug Steps
 
 This project is set up for an easy, one-click workflow within VS Code.
 
-1.  **Verify PATH:** Open a **new** terminal and ensure the toolchain is accessible:
+1.  **Verify PATH:** Open a terminal and ensure the toolchain is accessible:
     ```bash
     arm-none-eabi-gcc --version
     openocd --version
     ```
 2.  **Connect Hardware:** Plug in your **ST-Link/J-Link** probe to the development board.
-3.  **VS Code (Recommended):**
+3.  **Docker USB Passthrough (Optional):** If developing inside a Docker container, you must expose the host's USB bus to the container so OpenOCD can see the ST-Link hardware. Run your container with the following flags:
+    ```bash
+    # Mount the USB bus and run in privileged mode
+    docker run -it --privileged -v /dev/bus/usb:/dev/bus/usb <image_name_or_id>
+    ```
+4.  **VS Code (Recommended):**
     * Open this repository folder in VS Code.
     * Go to the Run and Debug view (F5).
     * Press **F5**. The configured `preLaunchTask` will automatically run `./build.sh Debug` and launch the debugger.
-4.  **Manual (Terminal):**
+5.  **Manual (Terminal):**
     * To build the final binary: `./build.sh Release`
     * To build and enable debugging symbols: `./build.sh Debug`
 
@@ -155,7 +158,7 @@ Contributions make the rocketry world go 'round! If you have suggestions or find
 
 ### 💖 Top Contributors:
 <a href="https://github.com/Ryerson-Rocketry/Canards-Software/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Ryerson-Rocketry/Canards-Software" alt="contrib.rocks image" />
+  <img src="https://contrib.rocks/image?repo=Ryerson-Rocketry/Canards-Software" alt="contrib.rocks image" />
 </a>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -173,8 +176,6 @@ Project Repository: [https://github.com/Ryerson-Rocketry/Canards-Software](https
 
 ## 🏆 Acknowledgments
 
-* [**Madgwick, S. O. H. (2010). An efficient orientation filter for inertial and inertial/magnetic sensor arrays.**](https://courses.cs.washington.edu/courses/cse466/14au/labs/l4/madgwick_internal_report.pdf) <br/>
-    *Used as a foundational reference for state estimation.*
 * [**othneildrew/Best-README-Template**](https://github.com/othneildrew/Best-README-Template) <br/>
     *For providing the clean and structured Markdown template.*
     
