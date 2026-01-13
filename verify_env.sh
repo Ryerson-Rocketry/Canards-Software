@@ -36,3 +36,6 @@ if [ $? -eq 0 ]; then
 else
     echo -e "${RED}[FAIL]${NC} Makefile test failed."
 fi
+
+# 5. Check if udev rules exist 
+sudo chown -R vscode /dev/bus/usb

@@ -6,6 +6,8 @@ FROM mcr.microsoft.com/devcontainers/base:jammy
 # use ARG so it only affects build not process and not final container
 ARG DEBIAN_FRONTEND=noninteractive
 
+RUN groupadd -f plugdev && usermod -aG plugdev vscode
+
 RUN apt-get update && apt-get -y install --no-install-recommends \
     make \
     gcc-arm-none-eabi \

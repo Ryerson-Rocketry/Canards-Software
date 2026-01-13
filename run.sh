@@ -75,7 +75,7 @@ fi
 echo "--- FLASHING ---"
 openocd -f interface/stlink.cfg \
         -f target/stm32f4x.cfg \
-        -c "program build/your_project_name.elf verify reset exit"
+        -c "program {$ELF_PATH} verify reset exit"
 
 echo "--- Script is Done --- "
 exit 0

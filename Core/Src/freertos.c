@@ -3,7 +3,7 @@
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
-#include "Drivers/ms5611.h"
+#include <string.h>
 
 // Task handle and attributes
 osThreadId_t defaultTaskHandle;
@@ -28,6 +28,6 @@ void StartDefaultTask(void *argument)
   for (;;)
   {
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    osDelay(10);
+    osDelay(100);
   }
 }

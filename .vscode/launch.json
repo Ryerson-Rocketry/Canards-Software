@@ -4,17 +4,16 @@
         {
             "name": "Cortex Debug",
             "cwd": "${workspaceFolder}",
-            "executable": "./build/Debug/Canards.elf",
+            "executable": "${workspaceFolder}/build/Run/Canards.elf",
             "request": "launch",
             "type": "cortex-debug",
             "runToEntryPoint": "main",
             "servertype": "openocd",
-            "device": "STM32F446xx",
+            "device": "STM32F4",
             "configFiles": [
                 "interface/stlink.cfg",
                 "target/stm32f4x.cfg"
-            ],
-            "preLaunchTask": "Build Project"
+            ]
         }
     ]
 }
