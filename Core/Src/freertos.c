@@ -105,7 +105,9 @@ void ReadSensorTask(void *argument)
       osDelay(100);
     }
   }
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn); // For LSM Accel (Pin 0)
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn); // For LSM Gyro (Pin 2)
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn); // For Mag (Pin 3)
 
   for (;;)
   {
@@ -154,7 +156,7 @@ void ReadSensorTask(void *argument)
     }
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    osDelay(100);
+    osDelay(10);
   }
 }
 
@@ -177,4 +179,23 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
   /* Force a context switch if a higher priority task was woken */
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+int32_t lsm_platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len)
+{
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(handle, &reg, 1, 1000);
+  HAL_SPI_Transmit(handle, (uint8_t *)bufp, len, 1000);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+  return 0;
+}
+
+int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
+{
+  uint8_t addr = reg | 0x80;
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(handle, &addr, 1, 100); // Send Address
+  HAL_SPI_Receive(handle, bufp, len, 100); // Get Data
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+  return 0;
 }
