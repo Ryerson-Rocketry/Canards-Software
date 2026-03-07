@@ -183,33 +183,36 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 int32_t lsm_platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len)
 {
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(handle, &reg, 1, 1000);
-  HAL_SPI_Transmit(handle, (uint8_t *)bufp, len, 1000);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+  // Use the correct label for the IMU CS pin
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+
+  HAL_SPI_Transmit(handle, &reg, 1, 100);
+  HAL_SPI_Transmit(handle, (uint8_t *)bufp, len, 100);
+
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
   return 0;
 }
 
+// Verify these are your platform functions in main.c or lsm_app.c
 int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
 {
   uint8_t addr = reg | 0x80; // Read bit
+  HAL_StatusTypeDef status;
 
+  // Manually pull CS low
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 
-  // Send the address first
-  if (HAL_SPI_Transmit(handle, &addr, 1, 100) != HAL_OK)
+  // 1. Send register address
+  status = HAL_SPI_Transmit(handle, &addr, 1, 100);
+
+  if (status == HAL_OK)
   {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
-    return -1;
+    // 2. Receive data
+    status = HAL_SPI_Receive(handle, bufp, len, 100);
   }
 
-  // Immediately receive the data
-  if (HAL_SPI_Receive(handle, bufp, len, 100) != HAL_OK)
-  {
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
-    return -1;
-  }
-
+  // Manually pull CS high
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
-  return 0;
+
+  return (status == HAL_OK) ? 0 : -1;
 }
