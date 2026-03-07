@@ -118,7 +118,7 @@ HAL_StatusTypeDef getData(uint32_t res[3])
 /**
  * @brief Full SET/RESET measurement cycle.
  */
-HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magData[4])
+HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magData[3])
 {
     uint32_t out1[3], out2[3];
 
@@ -149,7 +149,6 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magD
         }
         magData[i] = ((float)((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f) / 16384.0f;
     }
-    magData[3] = 0;
 
     return HAL_OK;
 }

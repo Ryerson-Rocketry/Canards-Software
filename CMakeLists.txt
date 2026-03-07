@@ -48,11 +48,18 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Drivers/ms5611.c
     Core/Src/Drivers/lsm6dso32.c
     Core/Src/Drivers/lsm6dso32_app.c
+    Core/Src/StateEstimation/altitude_estimation.c
+    Core/Src/Utils/math_utils.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Inc/Drivers
+    Core/Inc/StateEstimation
+    Core/Inc/Utils
+    Core/Inc/Defs
+
+
 )
 
 # Add project symbols (macros)

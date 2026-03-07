@@ -1,0 +1,2 @@
+void altPredict(float dt, float *pos, float *vel, float acceleration, float processNoise[2][2], float systemCov[2][2], float stateTransition[2][2]);
+void altUpdate(float *pos, float *vel, float press, float systemCov[2][2], float baroAltitudeVariance);

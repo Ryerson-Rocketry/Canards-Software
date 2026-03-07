@@ -2,6 +2,9 @@
 #include "Drivers/mmc5983ma.h"
 #include "Drivers/ms5611.h"
 #include "Drivers/lsm6dso32_app.h"
+#include "StateEstimation/altitude_estimation.h"
+#include "Utils/math_utils.h"
+#include "Defs/states.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -11,10 +14,12 @@
 #include "stdint.h"
 #include <stdio.h>
 #include <math.h>
+#include <stdbool.h>
 
 #define MAG_PIN_INT MAG_PIN_INT_VAL
-const float X_OFFSET = 0.077f;
-const float Y_OFFSET = 0.147f;
+
+const float MAG_X_OFFSET = 0.077f;
+const float MAG_Y_OFFSET = 0.147f;
 const float SEA_LEVEL_PA = 101325.0f; // Standard atmospheric pressure
 
 SemaphoreHandle_t xMagDataReadySemaphore;
@@ -23,13 +28,47 @@ SemaphoreHandle_t xImuAccelReadySemaphore;
 SemaphoreHandle_t xImuGyroReadySemaphore;
 
 osThreadId_t readSensorTaskHandle;
+osThreadId_t altitudeEstimationTaskHandle;
+osThreadId_t launchDetectionTaskHandle;
+osThreadId_t heartBeatMonitorTaskHandle;
+
+FlightState_t currentFlightState = STATE_PAD;
+RawSensorData_t currentRawData;
+RocketState_t currentRocketState;
+SDCardDataFormat_t _SDCardDataState;
+
+volatile bool readSensorTask = false;
+volatile bool altitudeEstimationTask = false;
+volatile bool launchDetectionTask = false;
+
 const osThreadAttr_t readSensorTask_attributes = {
-    .name = "defaultTask",
+    .name = "readSensorTask",
     .stack_size = 1024 * 8,
+    .priority = (osPriority_t)osPriorityAboveNormal5,
+};
+
+const osThreadAttr_t altitudeEstimationTask_attributes = {
+    .name = "altitudeEstimationTask",
+    .stack_size = 512 * 2,
+    .priority = (osPriority_t)osPriorityAboveNormal3,
+};
+
+const osThreadAttr_t launchDetectionTask_attributes = {
+    .name = "launchDetectionTask",
+    .stack_size = 128 * 2,
     .priority = (osPriority_t)osPriorityNormal,
 };
 
+const osThreadAttr_t heartBeatMonitorTask_attributes = {
+    .name = "watchdawgTask",
+    .stack_size = 256 * 2,
+    .priority = (osPriority_t)osPriorityBelowNormal1,
+};
+
 void ReadSensorTask(void *argument);
+void AltitudeEstimationTask(void *argument);
+void LaunchDetectionTask(void *argument);
+void HeartBeatMonitorTask(void *argument);
 
 void MX_FREERTOS_Init(void);
 
@@ -44,7 +83,11 @@ void MX_FREERTOS_Init(void)
   configASSERT(xMagDataReadySemaphore);
   configASSERT(xImuAccelReadySemaphore);
   configASSERT(xImuGyroReadySemaphore);
+
   readSensorTaskHandle = osThreadNew(ReadSensorTask, NULL, &readSensorTask_attributes);
+  altitudeEstimationTaskHandle = osThreadNew(AltitudeEstimationTask, NULL, &altitudeEstimationTask_attributes);
+  launchDetectionTaskHandle = osThreadNew(LaunchDetectionTask, NULL, &launchDetectionTask_attributes);
+  heartBeatMonitorTaskHandle = osThreadNew(HeartBeatMonitorTask, NULL, &heartBeatMonitorTask_attributes);
 }
 
 void ReadSensorTask(void *argument)
@@ -52,14 +95,9 @@ void ReadSensorTask(void *argument)
   uint32_t freq = HAL_RCC_GetSysClockFreq();
   printf("CPU Freq: %lu Hz\r\n", freq);
 
-  float magData[4] = {0.0f};
   uint16_t prom[8] = {0};
-  int32_t pressure = 0;
-  int32_t temperature = 0;
   float temp_c = 0;
   int counter = 0;
-  float accel_data[3];
-  float gyro_data[3];
 
   HAL_StatusTypeDef status = HAL_ERROR;
   HAL_StatusTypeDef magStatus = HAL_ERROR;
@@ -111,14 +149,14 @@ void ReadSensorTask(void *argument)
 
   for (;;)
   {
-    magStatus = magGetData(xMagDataReadySemaphore, magData);
-    baroStatus = ms5611GetPressureAndTemp(prom, &pressure, &temperature);
+
+    magStatus = magGetData(xMagDataReadySemaphore, currentRawData.mag);
+    baroStatus = ms5611GetPressureAndTemp(prom, &currentRawData.pressure, &currentRawData.temperature);
 
     if (magStatus == HAL_OK)
     {
-      // Apply Calibration: Subtract the Hard Iron offsets
-      float x_cal = magData[0] - X_OFFSET;
-      float y_cal = magData[1] - Y_OFFSET;
+      float x_cal = currentRawData.mag[0] - MAG_X_OFFSET;
+      float y_cal = currentRawData.mag[1] - MAG_Y_OFFSET;
 
       // Calculate heading
       float heading_rad = atan2f(y_cal, x_cal);
@@ -136,27 +174,176 @@ void ReadSensorTask(void *argument)
 
     if (baroStatus == HAL_OK)
     {
-      temp_c = (float)temperature / 100.0f;
-      printf("Pressure: %ld, Temp: %0.2f", pressure, temp_c);
+      temp_c = (float)currentRawData.temperature / 100.0f;
+      printf("Pressure: %ld, Temp: %0.2f", currentRawData.pressure, temp_c);
     }
 
     if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
     {
-      LSM6DSO32_Read_Accel(accel_data);
+      LSM6DSO32_Read_Accel(currentRawData.accel);
       // Now accel_data[0,1,2] contains values in mg
-      printf("A[mg]: %.1f, %.1f, %.1f\r\n", accel_data[0], accel_data[1], accel_data[2]);
+      printf("A[mg]: %.1f, %.1f, %.1f\r\n", currentRawData.accel[0], currentRawData.accel[1], currentRawData.accel[2]);
     }
 
     // Run Gyro processing when INT2 (Pin 2) triggers
     if (xSemaphoreTake(xImuGyroReadySemaphore, 0) == pdTRUE)
     {
-      LSM6DSO32_Read_Gyro(gyro_data);
+      LSM6DSO32_Read_Gyro(currentRawData.gyro);
       // Now gyro_data[0,1,2] contains values in dps
-      printf("G[dps]: %.1f, %.1f, %.1f\r\n", gyro_data[0], gyro_data[1], gyro_data[2]);
+      printf("G[dps]: %.1f, %.1f, %.1f\r\n", currentRawData.gyro[0], currentRawData.gyro[1], currentRawData.gyro[2]);
     }
 
+    currentRawData.timestamp = osKernelGetTickCount();
+
+    xTaskNotifyGive(launchDetectionTaskHandle);
+    xTaskNotifyGive(altitudeEstimationTaskHandle);
+
+    readSensorTask = true;
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    osDelay(10);
+    osDelay(1);
+  }
+}
+
+void AltitudeEstimationTask(void *argument)
+{
+  float dt = 0.0f;
+  float processNoise[2][2] = {{0.01f, 0.0f}, {0.0f, 0.01f}};
+  float systemCov[2][2] = {{10.0f, 0.0f}, {0.0f, 10.0f}};
+  float stateTransition[2][2] = {
+      {1.0f, dt},
+      {0.0f, 1.0f}};
+  float baroAltVar = 0.5f;
+  uint32_t last_tick = osKernelGetTickCount();
+  float accel_in_m_s2;
+
+  for (;;)
+  {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (currentFlightState == STATE_PAD)
+    {
+      // Optional: Keep velocity/position at exactly 0.0
+      currentRocketState.position = 0.0f;
+      currentRocketState.velocity = 0.0f;
+      continue;
+    }
+
+    uint32_t current_tick = osKernelGetTickCount();
+    currentRocketState.launch_tick = current_tick;
+    dt = (float)(current_tick - last_tick) / 1000.0f;
+    last_tick = current_tick;
+
+    // safety for first run
+    if (dt <= 0.0f)
+    {
+      dt = 0.01f;
+    }
+
+    accel_in_m_s2 = (currentRawData.accel[2] - 1000.0f) * 0.00980665f;
+    altPredict(dt, &currentRocketState.position, &currentRocketState.velocity, accel_in_m_s2, processNoise, systemCov, stateTransition);
+    altUpdate(&currentRocketState.position, &currentRocketState.velocity, pressureToAltitude(currentRawData.pressure, SEA_LEVEL_PA), systemCov, baroAltVar);
+
+    // update struct
+    currentRocketState.timestamp = osKernelGetTickCount();
+    currentRocketState.acceleration = accel_in_m_s2;
+    currentRocketState.pitch += currentRawData.gyro[0] * dt;
+    currentRocketState.yaw += currentRawData.gyro[1] * dt;
+    currentRocketState.roll += currentRawData.gyro[2] * dt;
+    currentRocketState.tilt_angle = sqrtf(powf(currentRocketState.pitch, 2) + powf(currentRocketState.yaw, 2));
+
+    altitudeEstimationTask = true;
+  }
+}
+
+void LaunchDetectionTask(void *argument)
+{
+
+  float accel_z;
+  uint32_t accel_start_time = 0;
+  bool threshold_active = false;
+  uint32_t burnoutStartTime = 0;
+  static bool launch_recorded = false;
+
+  for (;;)
+  {
+
+    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (notification == 0)
+    {
+      continue;
+    }
+
+    uint32_t now = osKernelGetTickCount();
+    accel_z = currentRawData.accel[2] - 1000.0f;
+
+    if (currentFlightState != STATE_PAD && !launch_recorded)
+    {
+      currentRocketState.launch_tick = osKernelGetTickCount();
+      launch_recorded = true;
+    }
+
+    switch (currentFlightState)
+    {
+    case STATE_PAD:
+      currentRocketState.pitch = 0.0f;
+      currentRocketState.yaw = 0.0f;
+      currentRocketState.roll = 0.0f;
+      currentRocketState.tilt_angle = 0.0f;
+
+      if (accel_z >= 4000.0f)
+      {
+        if (!threshold_active)
+        {
+          accel_start_time = now;
+          threshold_active = true;
+        }
+        if ((now - accel_start_time) >= pdMS_TO_TICKS(100))
+        {
+          currentFlightState = STATE_BOOST;
+          printf("LAUNCH DETECTED at %lu ms\r\n", now);
+        }
+      }
+      else
+      {
+        threshold_active = false;
+      }
+      break;
+
+    case STATE_BOOST:
+      if ((now - accel_start_time) >= pdMS_TO_TICKS(7800) && accel_z <= 1000.0f)
+      {
+        burnoutStartTime = now;
+        currentFlightState = STATE_BURNOUT;
+        printf("BURNOUT at %lu ms\r\n", now);
+      }
+      break;
+
+    case STATE_BURNOUT:
+      if ((now - burnoutStartTime) >= pdMS_TO_TICKS(1000))
+      {
+        currentFlightState = STATE_CANARDS_ACTIVATE;
+        printf("CANARDS ACTIVE\r\n");
+      }
+      break;
+    }
+    launchDetectionTask = true;
+  }
+}
+
+void HeartBeatMonitorTask(void *argument)
+{
+  for (;;)
+  {
+    if (readSensorTask && altitudeEstimationTask && launchDetectionTask)
+    {
+      HAL_IWDG_Refresh(&hiwdg); // refresh the watchdog
+      // reset flags for the next check
+      readSensorTask = false;
+      altitudeEstimationTask = false;
+      launchDetectionTask = false;
+      osDelay(20);
+    }
   }
 }
 
@@ -195,21 +382,21 @@ int32_t lsm_platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint1
 
 int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
 {
-    uint8_t addr = reg | 0x80;
-    HAL_StatusTypeDef status;
-    SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)handle;
+  uint8_t addr = reg | 0x80;
+  HAL_StatusTypeDef status;
+  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)handle;
 
-    HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
 
-    // Send address
-    status = HAL_SPI_Transmit(hspi, &addr, 1, 100);
+  // Send address
+  status = HAL_SPI_Transmit(hspi, &addr, 1, 100);
 
-    if (status == HAL_OK)
-    {
-        status = HAL_SPI_Receive(hspi, bufp, len, 100);
-    }
+  if (status == HAL_OK)
+  {
+    status = HAL_SPI_Receive(hspi, bufp, len, 100);
+  }
 
-    HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
 
-    return (status == HAL_OK) ? 0 : -1;
+  return (status == HAL_OK) ? 0 : -1;
 }
