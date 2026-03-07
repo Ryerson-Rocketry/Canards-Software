@@ -193,26 +193,23 @@ int32_t lsm_platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint1
   return 0;
 }
 
-// Verify these are your platform functions in main.c or lsm_app.c
 int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
 {
-  uint8_t addr = reg | 0x80; // Read bit
-  HAL_StatusTypeDef status;
+    uint8_t addr = reg | 0x80;
+    HAL_StatusTypeDef status;
+    SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)handle;
 
-  // Manually pull CS low
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
 
-  // 1. Send register address
-  status = HAL_SPI_Transmit(handle, &addr, 1, 100);
+    // Send address
+    status = HAL_SPI_Transmit(hspi, &addr, 1, 100);
 
-  if (status == HAL_OK)
-  {
-    // 2. Receive data
-    status = HAL_SPI_Receive(handle, bufp, len, 100);
-  }
+    if (status == HAL_OK)
+    {
+        status = HAL_SPI_Receive(hspi, bufp, len, 100);
+    }
 
-  // Manually pull CS high
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
 
-  return (status == HAL_OK) ? 0 : -1;
+    return (status == HAL_OK) ? 0 : -1;
 }

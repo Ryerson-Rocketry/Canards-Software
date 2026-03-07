@@ -19,11 +19,12 @@ HAL_StatusTypeDef LSM6DSO32_Rocket_Init(SPI_HandleTypeDef *hspi)
 {
     uint8_t whoamI, rst;
 
-    /* Initialize mems driver interface */
     dev_ctx.write_reg = lsm_platform_write;
     dev_ctx.read_reg = lsm_platform_read;
-    dev_ctx.mdelay = platform_delay; // <--- ADD THIS
+    dev_ctx.mdelay = platform_delay;
     dev_ctx.handle = hspi;
+
+    osDelay(50); // Give the sensor time to stabilize after power-up
 
     /* Check device ID */
     lsm6dso32_device_id_get(&dev_ctx, &whoamI);
@@ -35,30 +36,33 @@ HAL_StatusTypeDef LSM6DSO32_Rocket_Init(SPI_HandleTypeDef *hspi)
     do
     {
         lsm6dso32_reset_get(&dev_ctx, &rst);
+        osDelay(1);
     } while (rst);
 
-    /* --- Rocket Specific Config (Integrated from ST Example) --- */
-
-    /* Disable I3C to save power and prevent interference */
+    /* --- Configuration --- */
     lsm6dso32_i3c_disable_set(&dev_ctx, LSM6DSO32_I3C_DISABLE);
-
-    /* Enable Block Data Update (BDU) - very important for high-speed flight */
     lsm6dso32_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
 
-    /* Set full scale: 16g for launch, 2000dps for roll stabilization */
+    // Set interrupts to Pulsed mode so they don't get "stuck" high
+    lsm6dso32_int_notification_set(&dev_ctx, LSM6DSO32_ALL_INT_PULSED);
+
     lsm6dso32_xl_full_scale_set(&dev_ctx, LSM6DSO32_16g);
     lsm6dso32_gy_full_scale_set(&dev_ctx, LSM6DSO32_2000dps);
 
-    /* Set ODR to 104Hz (Rocket-grade speed) */
     lsm6dso32_xl_data_rate_set(&dev_ctx, LSM6DSO32_XL_ODR_104Hz_NORMAL_MD);
     lsm6dso32_gy_data_rate_set(&dev_ctx, LSM6DSO32_GY_ODR_104Hz_NORMAL_MD);
 
-    /* Interrupt routing logic (as you discovered previously) */
+    /* Interrupt Routing */
     lsm6dso32_pin_int1_route_t int1_route = {0};
-    lsm6dso32_pin_int1_route_get(&dev_ctx, &int1_route);
     int1_route.int1_ctrl.int1_drdy_xl = PROPERTY_ENABLE;
     lsm6dso32_pin_int1_route_set(&dev_ctx, &int1_route);
 
+    // FIX: Route Gyro to INT2
+    lsm6dso32_pin_int2_route_t int2_route = {0};
+    lsm6dso32_pin_int2_route_get(&dev_ctx, &int2_route);
+    int2_route.int2_ctrl.int2_drdy_g = PROPERTY_ENABLE;
+    lsm6dso32_pin_int2_route_set(&dev_ctx, &int2_route);
+    lsm6dso32_int_notification_set(&dev_ctx, LSM6DSO32_ALL_INT_PULSED);
     return HAL_OK;
 }
 
