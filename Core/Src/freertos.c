@@ -200,7 +200,7 @@ int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len
   HAL_StatusTypeDef status;
 
   // Manually pull CS low
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
 
   // 1. Send register address
   status = HAL_SPI_Transmit(handle, &addr, 1, 100);
@@ -212,7 +212,7 @@ int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len
   }
 
   // Manually pull CS high
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
 
   return (status == HAL_OK) ? 0 : -1;
 }
