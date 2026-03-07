@@ -17,4 +17,4 @@
 #define MAG_PIN_INT_VAL GPIO_PIN_3
 
 HAL_StatusTypeDef magInit(void);
-HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magData[4]);
+HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magData[3]);

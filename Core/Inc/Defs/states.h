@@ -39,5 +39,9 @@ typedef struct
     float position;
     float velocity;
     float pressure;
+    float tiltAngle;
+    float pitch;
+    float yaw;
+    float roll;
     uint32_t timestamp;
 } SDCardDataFormat_t;

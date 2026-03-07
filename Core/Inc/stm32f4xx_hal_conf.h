@@ -55,7 +55,7 @@
 /* #define HAL_HASH_MODULE_ENABLED */
 #define HAL_I2C_MODULE_ENABLED
 /* #define HAL_I2S_MODULE_ENABLED */
-/* #define HAL_IWDG_MODULE_ENABLED */
+#define HAL_IWDG_MODULE_ENABLED
 /* #define HAL_LTDC_MODULE_ENABLED */
 /* #define HAL_RNG_MODULE_ENABLED */
 /* #define HAL_RTC_MODULE_ENABLED */
@@ -264,7 +264,7 @@
 * Deactivated: CRC code cleaned from driver
 */
 
-#define USE_SPI_CRC                     1U
+#define USE_SPI_CRC                     0U
 
 /* Includes ------------------------------------------------------------------*/
 /**
