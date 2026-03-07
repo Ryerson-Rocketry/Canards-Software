@@ -65,6 +65,7 @@ HAL_StatusTypeDef magInit(void)
     write(MAG_CTRL_REG_0, 0x04); // Enable Interrupts
 
     printf("[MAG]: Initialized and Reset.\r\n");
+    osDelay(1);
     return HAL_OK;
 }
 
@@ -123,7 +124,7 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magD
 
     // --- PHASE 1: SET ---
     write(MAG_CTRL_REG_0, 0x08);
-    osDelay(5); 
+    osDelay(5);
     prepareForHardwareAction(magDataReadySemaphore);
 
     if (triggerAndWait(magDataReadySemaphore) != HAL_OK)
@@ -131,8 +132,8 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magD
     getData(out1);
 
     // --- PHASE 2: RESET ---
-    write(MAG_CTRL_REG_0, 0x10); 
-    osDelay(5); 
+    write(MAG_CTRL_REG_0, 0x10);
+    osDelay(5);
     prepareForHardwareAction(magDataReadySemaphore);
 
     if (triggerAndWait(magDataReadySemaphore) != HAL_OK)
