@@ -192,10 +192,24 @@ int32_t lsm_platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint1
 
 int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
 {
-  uint8_t addr = reg | 0x80;
+  uint8_t addr = reg | 0x80; // Read bit
+
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(handle, &addr, 1, 100); // Send Address
-  HAL_SPI_Receive(handle, bufp, len, 100); // Get Data
+
+  // Send the address first
+  if (HAL_SPI_Transmit(handle, &addr, 1, 100) != HAL_OK)
+  {
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+    return -1;
+  }
+
+  // Immediately receive the data
+  if (HAL_SPI_Receive(handle, bufp, len, 100) != HAL_OK)
+  {
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+    return -1;
+  }
+
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
   return 0;
 }
