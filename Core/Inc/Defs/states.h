@@ -31,7 +31,8 @@ typedef struct
     uint32_t timestamp;
 } RocketState_t;
 
-typedef struct
+// 4-byte aligned for DMA
+typedef struct __attribute__((aligned(4)))
 {
     float accel[3];
     float gyro[3];

@@ -2,6 +2,8 @@
 CAD.formats=
 CAD.pinconfig=
 CAD.provider=
+FATFS.IPParameters=_FS_NORTC
+FATFS._FS_NORTC=1
 FREERTOS.IPParameters=Tasks01
 FREERTOS.Tasks01=defaultTask,24,128,StartDefaultTask,Default,NULL,Dynamic,NULL,NULL
 File.Version=6
@@ -348,6 +350,8 @@ RCC.VCOInputFreq_Value=2000000
 RCC.VCOOutputFreq_Value=144000000
 RCC.VCOSAIInputFreq_Value=1250000
 RCC.VCOSAIOutputFreq_Value=240000000
+SDIO.ClockDiv=4
+SDIO.IPParameters=ClockDiv
 SH.GPXTI0.0=GPIO_EXTI0
 SH.GPXTI0.ConfNb=1
 SH.GPXTI2.0=GPIO_EXTI2

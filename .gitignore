@@ -44,3 +44,5 @@ _deps/
 # Ignore standard Windows hidden files
 Thumbs.db
 desktop.ini
+
+Core/Logs

@@ -18,13 +18,21 @@
 #include <stdbool.h>
 #include "iwdg.h"
 #include <string.h>
-#include "ff.h"
+#include "fatfs.h"
 
 #define MAG_PIN_INT MAG_PIN_INT_VAL
 
 const float MAG_X_OFFSET = 0.077f;
 const float MAG_Y_OFFSET = 0.147f;
 const float SEA_LEVEL_PA = 101325.0f; // Standard atmospheric pressure
+
+extern FATFS SDFatFS;
+extern FIL SDFile;
+extern char SDPath[4];
+extern SD_HandleTypeDef hsd;
+bool sdInitialized = false;
+
+const char flightDataFileName[] = "flightData.dat";
 
 SemaphoreHandle_t xMagDataReadySemaphore;
 SemaphoreHandle_t gI2c1Mutex;
@@ -48,34 +56,15 @@ volatile bool launchDetectionTask = false;
 volatile bool storeDataTask = false;
 
 const osThreadAttr_t readSensorTask_attributes = {
-    .name = "readSensorTask",
-    .stack_size = 1024 * 8,
-    .priority = (osPriority_t)osPriorityAboveNormal5,
-};
-
+    .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal5};
 const osThreadAttr_t altitudeEstimationTask_attributes = {
-    .name = "altitudeEstimationTask",
-    .stack_size = 512 * 2,
-    .priority = (osPriority_t)osPriorityAboveNormal3,
-};
-
+    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t launchDetectionTask_attributes = {
-    .name = "launchDetectionTask",
-    .stack_size = 128 * 2,
-    .priority = (osPriority_t)osPriorityNormal,
-};
-
-const osThreadAttr_t heartBeatMonitorTask_attributes = {
-    .name = "watchdawgTask",
-    .stack_size = 256 * 2,
-    .priority = (osPriority_t)osPriorityBelowNormal1,
-};
-
+    .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityNormal};
 const osThreadAttr_t storeDataTask_attributes = {
-    .name = "storeDataToSDCard",
-    .stack_size = 1024 * 4,
-    .priority = (osPriority_t)osPriorityAboveNormal2,
-};
+    .name = "storeTask", .stack_size = 1024 * 3, .priority = osPriorityAboveNormal2};
+const osThreadAttr_t heartBeat_attributes = {
+    .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal1};
 
 void ReadSensorTask(void *argument);
 void AltitudeEstimationTask(void *argument);
@@ -100,7 +89,7 @@ void MX_FREERTOS_Init(void)
   readSensorTaskHandle = osThreadNew(ReadSensorTask, NULL, &readSensorTask_attributes);
   altitudeEstimationTaskHandle = osThreadNew(AltitudeEstimationTask, NULL, &altitudeEstimationTask_attributes);
   launchDetectionTaskHandle = osThreadNew(LaunchDetectionTask, NULL, &launchDetectionTask_attributes);
-  heartBeatMonitorTaskHandle = osThreadNew(HeartBeatMonitorTask, NULL, &heartBeatMonitorTask_attributes);
+  heartBeatMonitorTaskHandle = osThreadNew(HeartBeatMonitorTask, NULL, &heartBeat_attributes);
   storeDataTaskHandle = osThreadNew(StoreDataTask, NULL, &storeDataTask_attributes);
 }
 
@@ -221,8 +210,7 @@ void ReadSensorTask(void *argument)
     xTaskNotifyGive(altitudeEstimationTaskHandle);
 
     readSensorTask = true;
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    osDelay(pdMS_TO_TICKS(10));
+    osDelay(10);
   }
 }
 
@@ -237,18 +225,22 @@ void AltitudeEstimationTask(void *argument)
   float baroAltVar = 0.5f;
   uint32_t last_tick = osKernelGetTickCount();
   float accel_in_m_s2;
+  uint32_t notification;
 
   for (;;)
   {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (notification == 0)
+    {
+      altitudeEstimationTask = true;
+      continue;
+    }
 
     if (currentFlightState == STATE_PAD)
     {
-      // Optional: Keep velocity/position at exactly 0.0
       currentRocketState.position = 0.0f;
       currentRocketState.velocity = 0.0f;
-      altitudeEstimationTask = true;
-      continue;
     }
 
     uint32_t current_tick = osKernelGetTickCount();
@@ -274,7 +266,7 @@ void AltitudeEstimationTask(void *argument)
     currentRocketState.roll += currentRawData.gyro[2] * dt;
     currentRocketState.tilt_angle = sqrtf(powf(currentRocketState.pitch, 2) + powf(currentRocketState.yaw, 2));
 
-    xTaskNotifyGive(storeDataTaskHandle);
+    xTaskNotifyGive((TaskHandle_t)storeDataTaskHandle);
     altitudeEstimationTask = true;
   }
 }
@@ -295,6 +287,7 @@ void LaunchDetectionTask(void *argument)
 
     if (notification == 0)
     {
+      launchDetectionTask = true;
       continue;
     }
 
@@ -363,37 +356,60 @@ void LaunchDetectionTask(void *argument)
 
 void StoreDataTask(void *argument)
 {
-  FATFS SDFatFS;
-  FIL SDFile;
-  char SDPath[4];
-  bool sdInitialized = false;
+  UINT bytesWritten;
+  uint32_t syncCounter = 0;
+
+  if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 0) != FR_OK)
+  {
+    printf("Unable to mount disk\n");
+    sdInitialized = false;
+  }
+
+  if (f_open(&SDFile, flightDataFileName, FA_OPEN_APPEND | FA_WRITE) == FR_OK)
+  {
+    sdInitialized = true;
+    printf("SD File Ready: Writing Only\n");
+
+    // Hardware info trace
+    printf("SD Card Information:\n");
+    printf("Block size  : %lu\n", hsd.SdCard.BlockSize);
+    printf("Block nmbr  : %lu\n", hsd.SdCard.BlockNbr);
+    printf("Card size   : %lu MB\n", (hsd.SdCard.BlockSize * hsd.SdCard.BlockNbr) / 1024 / 1024);
+  }
+  else
+  {
+    printf("Critical: Could not open file for writing\n");
+    sdInitialized = false;
+  }
 
   for (;;)
   {
-
     uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (notification == 0)
+    if (sdInitialized && notification > 0)
     {
-      continue;
+      // Copy current data to snapshot for thread-safe writing
+      memcpy(snapshot.accel, currentRawData.accel, sizeof(snapshot.accel));
+      memcpy(snapshot.gyro, currentRawData.gyro, sizeof(snapshot.gyro));
+      memcpy(snapshot.mag, currentRawData.mag, sizeof(snapshot.mag));
+
+      snapshot.pressure = currentRawData.pressure;
+      snapshot.position = currentRocketState.position;
+      snapshot.velocity = currentRocketState.velocity;
+      snapshot.timestamp = osKernelGetTickCount();
+
+      // 3. Write binary data
+      if (f_write(&SDFile, &snapshot, sizeof(snapshot), &bytesWritten) == FR_OK)
+      {
+        // This ensures data is saved even if the battery disconnects on landing.
+        if (++syncCounter >= 50)
+        {
+          f_sync(&SDFile);
+          syncCounter = 0;
+          HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); // Visual heartbeat
+        }
+      }
     }
-
-    // can't use = op to copy an array to another, so we must memory copy everything to snapshot
-    memcpy(snapshot.accel, currentRawData.accel, sizeof(snapshot.accel));
-    memcpy(snapshot.gyro, currentRawData.gyro, sizeof(snapshot.gyro));
-    memcpy(snapshot.mag, currentRawData.mag, sizeof(snapshot.mag));
-
-    snapshot.pressure = currentRawData.pressure;
-    snapshot.position = currentRocketState.position;
-    snapshot.velocity = currentRocketState.velocity;
-    snapshot.tiltAngle = currentRocketState.tilt_angle;
-    snapshot.pitch = currentRocketState.pitch;
-    snapshot.yaw = currentRocketState.yaw;
-    snapshot.roll = currentRocketState.roll;
-    snapshot.timestamp = osKernelGetTickCount();
-
-    // write binary of snapshot to SD card
-
     storeDataTask = true;
   }
 }
@@ -411,7 +427,7 @@ void HeartBeatMonitorTask(void *argument)
       launchDetectionTask = false;
       storeDataTask = false;
     }
-    osDelay(20);
+    osDelay(100);
   }
 }
 
@@ -436,35 +452,13 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-int32_t lsm_platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len)
+int _write(int file, char *ptr, int len)
 {
-  // Use the correct label for the IMU CS pin
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
-
-  HAL_SPI_Transmit(handle, &reg, 1, 100);
-  HAL_SPI_Transmit(handle, (uint8_t *)bufp, len, 100);
-
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
-  return 0;
-}
-
-int32_t lsm_platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
-{
-  uint8_t addr = reg | 0x80;
-  HAL_StatusTypeDef status;
-  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)handle;
-
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
-
-  // Send address
-  status = HAL_SPI_Transmit(hspi, &addr, 1, 100);
-
-  if (status == HAL_OK)
+  int i = 0;
+  for (i = 0; i < len; i++)
   {
-    status = HAL_SPI_Receive(hspi, bufp, len, 100);
+    // Write character to ITM Stimulus Port 0
+    ITM_SendChar((*ptr++));
   }
-
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
-
-  return (status == HAL_OK) ? 0 : -1;
+  return len;
 }

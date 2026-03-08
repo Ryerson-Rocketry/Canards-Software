@@ -58,7 +58,7 @@ void prepareForHardwareAction(SemaphoreHandle_t sem)
 HAL_StatusTypeDef magInit(void)
 {
     write(MAG_CTRL_REG_1, 0x80); // Software Reset
-    osDelay(20);
+    osDelay(10);
 
     write(MAG_CTRL_REG_1, 0x01); // 400Hz Bandwidth
     write(MAG_CTRL_REG_2, 0x00); // Manual Mode
