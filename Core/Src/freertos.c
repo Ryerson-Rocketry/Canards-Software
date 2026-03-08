@@ -32,7 +32,7 @@ extern char SDPath[4];
 extern SD_HandleTypeDef hsd;
 bool sdInitialized = false;
 
-const char flightDataFileName[] = "flightData.dat";
+const char flightDataFileName[] = "LOG.DAT";
 
 SemaphoreHandle_t xMagDataReadySemaphore;
 SemaphoreHandle_t gI2c1Mutex;
@@ -62,7 +62,7 @@ const osThreadAttr_t altitudeEstimationTask_attributes = {
 const osThreadAttr_t launchDetectionTask_attributes = {
     .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityNormal};
 const osThreadAttr_t storeDataTask_attributes = {
-    .name = "storeTask", .stack_size = 1024 * 3, .priority = osPriorityAboveNormal2};
+    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t heartBeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal1};
 
@@ -359,13 +359,14 @@ void StoreDataTask(void *argument)
   UINT bytesWritten;
   uint32_t syncCounter = 0;
 
-  if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 0) != FR_OK)
+  if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
   {
     printf("Unable to mount disk\n");
     sdInitialized = false;
   }
 
-  if (f_open(&SDFile, flightDataFileName, FA_OPEN_APPEND | FA_WRITE) == FR_OK)
+  FRESULT res = f_open(&SDFile, flightDataFileName, FA_OPEN_APPEND | FA_WRITE);
+  if (res == FR_OK)
   {
     sdInitialized = true;
     printf("SD File Ready: Writing Only\n");
@@ -396,13 +397,17 @@ void StoreDataTask(void *argument)
       snapshot.pressure = currentRawData.pressure;
       snapshot.position = currentRocketState.position;
       snapshot.velocity = currentRocketState.velocity;
+      snapshot.tiltAngle = currentRocketState.tilt_angle;
+      snapshot.pitch = currentRocketState.pitch;
+      snapshot.yaw = currentRocketState.yaw;
+      snapshot.roll = currentRocketState.roll;
       snapshot.timestamp = osKernelGetTickCount();
 
       // 3. Write binary data
       if (f_write(&SDFile, &snapshot, sizeof(snapshot), &bytesWritten) == FR_OK)
       {
         // This ensures data is saved even if the battery disconnects on landing.
-        if (++syncCounter >= 50)
+        if (++syncCounter >= 1)
         {
           f_sync(&SDFile);
           syncCounter = 0;
