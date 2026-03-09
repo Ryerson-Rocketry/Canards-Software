@@ -19,14 +19,9 @@
 #include <string.h>
 #include "fatfs.h"
 #include <math.h>
-
-#define MAG_PIN_INT MAG_PIN_INT_VAL
-#define PI 3.14159265358979323846f
-#define GPS_BUF_SIZE 128
-
-const float MAG_X_OFFSET = 0.077f;
-const float MAG_Y_OFFSET = 0.147f;
-const float SEA_LEVEL_PA = 101325.0f; // Standard atmospheric pressure
+#include "Configs/flight_configs.h"
+#include "Utils/servo.h"
+#include "Tasks/tasks.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -34,7 +29,6 @@ extern char SDPath[4];
 extern SD_HandleTypeDef hsd;
 bool sdInitialized = false;
 
-const char FLIGHT_DATA_FILE_NAME[] = "LOG.DAT";
 char gps_buffer[GPS_BUF_SIZE];
 
 SemaphoreHandle_t xMagDataReadySemaphore;
@@ -43,18 +37,7 @@ SemaphoreHandle_t xImuGyroReadySemaphore;
 SemaphoreHandle_t gI2c1Mutex;
 SemaphoreHandle_t gSpi2Mutex;
 
-osThreadId_t readSensorTaskHandle;
-osThreadId_t altEstTaskHandle;
-osThreadId_t launchDetTaskHandle;
-osThreadId_t dataStoreTaskHandle;
-osThreadId_t gpsRetrieveTaskHandle;
-osThreadId_t heartbeatTaskHandle;
-osThreadId_t controlTaskHandle;
-
-FlightState_t currentFlightState = STATE_PAD;
-RawSensorData_t currentRawData;
-RocketState_t currentRocketState;
-SDCardDataFormat_t snapshot;
+Rocket_States_t Rocket;
 
 volatile bool readSensorTask = false;
 volatile bool altEstTask = false;
@@ -63,20 +46,9 @@ volatile bool dataStoreTask = false;
 volatile bool gpsRetrieveTask = false;
 volatile bool controlTask = false;
 
-const osThreadAttr_t readSensorTask_attributes = {
-    .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
-const osThreadAttr_t altEstTask_attributes = {
-    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
-const osThreadAttr_t launchDetTask_attributes = {
-    .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
-const osThreadAttr_t dataStoreTask_attributes = {
-    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
-const osThreadAttr_t gpsRetrieveTask_attributes = {
-    .name = "retrieveGpsCoords", .stack_size = 256 * 2, .priority = osPriorityAboveNormal1};
-const osThreadAttr_t controlTask_attributes = {
-    .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
-const osThreadAttr_t heartbeat_attributes = {
-    .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal3};
+const float Kp = 1.5f;
+const float Ki = 0.05f;
+const float Kd = 0.2f;
 
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
@@ -169,13 +141,13 @@ void vReadSensorTask(void *argument)
 
   for (;;)
   {
-    magStatus = magGetData(xMagDataReadySemaphore, currentRawData.mag);
-    ms5611Run(prom, &currentRawData.pressure, &currentRawData.temperature);
+    magStatus = magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
+    ms5611Run(prom, &Rocket.rawData.pressure, &Rocket.rawData.temperature);
 
     if (magStatus == HAL_OK)
     {
-      float x_cal = currentRawData.mag[0] - MAG_X_OFFSET;
-      float y_cal = currentRawData.mag[1] - MAG_Y_OFFSET;
+      float x_cal = Rocket.rawData.mag[0] - MAG_X_OFFSET;
+      float y_cal = Rocket.rawData.mag[1] - MAG_Y_OFFSET;
 
       float heading_rad = atan2f(y_cal, x_cal);
       float heading_deg = heading_rad * (180.0f / PI);
@@ -192,26 +164,26 @@ void vReadSensorTask(void *argument)
 
     if (baroStatus == HAL_OK)
     {
-      temp_c = (float)currentRawData.temperature / 100.0f;
-      printf("Pressure: %.2f, Temp: %.2f\r\n", currentRawData.pressure, temp_c);
+      temp_c = (float)Rocket.rawData.temperature / 100.0f;
+      printf("Pressure: %.2f, Temp: %.2f\r\n", Rocket.rawData.pressure, temp_c);
     }
 
     if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
     {
-      LSM6DSO32_Read_Accel(currentRawData.accel);
+      LSM6DSO32_Read_Accel(Rocket.rawData.accel);
       // Now accel_data[0,1,2] contains values in mg
-      printf("A[mg]: %.1f, %.1f, %.1f\r\n", currentRawData.accel[0], currentRawData.accel[1], currentRawData.accel[2]);
+      printf("A[mg]: %.1f, %.1f, %.1f\r\n", Rocket.rawData.accel[0], Rocket.rawData.accel[1], Rocket.rawData.accel[2]);
     }
 
     // Run Gyro processing when INT2 (Pin 2) triggers
     if (xSemaphoreTake(xImuGyroReadySemaphore, 0) == pdTRUE)
     {
-      LSM6DSO32_Read_Gyro(currentRawData.gyro);
+      LSM6DSO32_Read_Gyro(Rocket.rawData.gyro);
       // Now gyro_data[0,1,2] contains values in dps
-      printf("G[dps]: %.1f, %.1f, %.1f\r\n", currentRawData.gyro[0], currentRawData.gyro[1], currentRawData.gyro[2]);
+      printf("G[dps]: %.1f, %.1f, %.1f\r\n", Rocket.rawData.gyro[0], Rocket.rawData.gyro[1], Rocket.rawData.gyro[2]);
     }
 
-    currentRawData.timestamp = osKernelGetTickCount();
+    Rocket.rawData.timestamp = osKernelGetTickCount();
 
     xTaskNotifyGive(launchDetTaskHandle);
     xTaskNotifyGive(altEstTaskHandle);
@@ -244,14 +216,14 @@ void vAltEstTask(void *argument)
       continue;
     }
 
-    if (currentFlightState == STATE_PAD)
+    if (Rocket.flightState == STATE_PAD)
     {
-      currentRocketState.position = 0.0f;
-      currentRocketState.velocity = 0.0f;
+      Rocket.estimate.position = 0.0f;
+      Rocket.estimate.velocity = 0.0f;
     }
 
     uint32_t current_tick = osKernelGetTickCount();
-    currentRocketState.launch_tick = current_tick;
+    Rocket.estimate.launch_tick = current_tick;
     dt = (float)(current_tick - last_tick) / 1000.0f;
     last_tick = current_tick;
 
@@ -261,16 +233,16 @@ void vAltEstTask(void *argument)
       dt = 0.01f;
     }
 
-    accel_in_m_s2 = (currentRawData.accel[2] - 1000.0f) * 0.00980665f;
-    altPredict(dt, &currentRocketState.position, &currentRocketState.velocity, accel_in_m_s2, processNoise, systemCov, stateTransition);
-    altUpdate(&currentRocketState.position, &currentRocketState.velocity, pressureToAltitude(currentRawData.pressure, SEA_LEVEL_PA), systemCov, baroAltVar);
+    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f;
+    altPredict(dt, &Rocket.estimate.position, &Rocket.estimate.velocity, accel_in_m_s2, processNoise, systemCov, stateTransition);
+    altUpdate(&Rocket.estimate.position, &Rocket.estimate.velocity, pressureToAltitude(Rocket.rawData.pressure, SEA_LEVEL_PA), systemCov, baroAltVar);
 
-    currentRocketState.timestamp = osKernelGetTickCount();
-    currentRocketState.acceleration = accel_in_m_s2;
-    currentRocketState.rpy[0] += currentRawData.gyro[2] * dt;
-    currentRocketState.rpy[1] += currentRawData.gyro[0] * dt;
-    currentRocketState.rpy[2] += currentRawData.gyro[1] * dt;
-    currentRocketState.tilt_angle = sqrtf(powf(currentRocketState.rpy[1], 2) + powf(currentRocketState.rpy[2], 2));
+    Rocket.estimate.timestamp = osKernelGetTickCount();
+    Rocket.estimate.acceleration = accel_in_m_s2;
+    Rocket.estimate.rpy[0] += Rocket.rawData.gyro[2] * dt;
+    Rocket.estimate.rpy[1] += Rocket.rawData.gyro[0] * dt;
+    Rocket.estimate.rpy[2] += Rocket.rawData.gyro[1] * dt;
+    Rocket.estimate.tilt_angle = sqrtf(powf(Rocket.estimate.rpy[1], 2) + powf(Rocket.estimate.rpy[2], 2));
 
     xTaskNotifyGive(controlTaskHandle);
     xTaskNotifyGive((TaskHandle_t)dataStoreTaskHandle);
@@ -300,22 +272,22 @@ void vLaunchDetTask(void *argument)
     }
 
     uint32_t now = osKernelGetTickCount();
-    accel_z = currentRawData.accel[2] - 1000.0f;
+    accel_z = Rocket.rawData.accel[2] - 1000.0f;
 
-    if (currentFlightState != STATE_PAD && !launch_recorded)
+    if (Rocket.flightState != STATE_PAD && !launch_recorded)
     {
-      currentRocketState.launch_tick = osKernelGetTickCount();
+      Rocket.estimate.launch_tick = osKernelGetTickCount();
       launch_recorded = true;
     }
 
-    switch (currentFlightState)
+    switch (Rocket.flightState)
     {
     case STATE_PAD:
       // rpy
-      currentRocketState.rpy[0] = 0.0f;
-      currentRocketState.rpy[1] = 0.0f;
-      currentRocketState.rpy[2] = 0.0f;
-      currentRocketState.tilt_angle = 0.0f;
+      Rocket.estimate.rpy[0] = 0.0f;
+      Rocket.estimate.rpy[1] = 0.0f;
+      Rocket.estimate.rpy[2] = 0.0f;
+      Rocket.estimate.tilt_angle = 0.0f;
 
       if (accel_z >= 4000.0f)
       {
@@ -326,7 +298,7 @@ void vLaunchDetTask(void *argument)
         }
         if ((now - accel_start_time) >= pdMS_TO_TICKS(100))
         {
-          currentFlightState = STATE_BOOST;
+          Rocket.flightState = STATE_BOOST;
           printf("LAUNCH DETECTED at %lu ms\r\n", now);
         }
       }
@@ -340,7 +312,7 @@ void vLaunchDetTask(void *argument)
       if ((now - accel_start_time) >= pdMS_TO_TICKS(7800) && accel_z <= 1000.0f)
       {
         burnoutStartTime = now;
-        currentFlightState = STATE_BURNOUT;
+        Rocket.flightState = STATE_BURNOUT;
         printf("BURNOUT at %lu ms\r\n", now);
       }
       break;
@@ -348,16 +320,16 @@ void vLaunchDetTask(void *argument)
     case STATE_BURNOUT:
       if ((now - burnoutStartTime) >= pdMS_TO_TICKS(1000))
       {
-        currentFlightState = STATE_CANARDS_ACTIVATE;
+        Rocket.flightState = STATE_CANARDS_ACTIVATE;
         printf("CANARDS ACTIVE\r\n");
         canardActivationTime = now;
       }
       break;
     case STATE_CANARDS_ACTIVATE:
       HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
-      if (currentRocketState.velocity <= 50.0f && (now - canardActivationTime) >= pdMS_TO_TICKS(15000))
+      if (Rocket.estimate.velocity <= 50.0f && (now - canardActivationTime) >= pdMS_TO_TICKS(15000))
       {
-        currentFlightState = STATE_DESCENT;
+        Rocket.flightState = STATE_DESCENT;
       }
       break;
 
@@ -406,22 +378,22 @@ void vDataStoreTask(void *argument)
 
     if (sdInitialized && notification > 0)
     {
-      // Copy current data to snapshot for thread-safe writing
+      // Copy current data to Rocket.snapshot for thread-safe writing
       taskENTER_CRITICAL();
-      memcpy(snapshot.accel, currentRawData.accel, sizeof(snapshot.accel));
-      memcpy(snapshot.gyro, currentRawData.gyro, sizeof(snapshot.gyro));
-      memcpy(snapshot.mag, currentRawData.mag, sizeof(snapshot.mag));
-      memcpy(snapshot.gps, gps_buffer, sizeof(gps_buffer));
-      memcpy(snapshot.rpy, currentRocketState.rpy, sizeof(currentRocketState.rpy));
+      memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
+      memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
+      memcpy(Rocket.snapshot.mag, Rocket.rawData.mag, sizeof(Rocket.snapshot.mag));
+      memcpy(Rocket.snapshot.gps, gps_buffer, sizeof(gps_buffer));
+      memcpy(Rocket.snapshot.rpy, Rocket.estimate.rpy, sizeof(Rocket.estimate.rpy));
       taskEXIT_CRITICAL();
 
-      snapshot.pressure = currentRawData.pressure;
-      snapshot.position = currentRocketState.position;
-      snapshot.velocity = currentRocketState.velocity;
-      snapshot.tiltAngle = currentRocketState.tilt_angle;
-      snapshot.timestamp = osKernelGetTickCount();
+      Rocket.snapshot.pressure = Rocket.rawData.pressure;
+      Rocket.snapshot.position = Rocket.estimate.position;
+      Rocket.snapshot.velocity = Rocket.estimate.velocity;
+      Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
+      Rocket.snapshot.timestamp = osKernelGetTickCount();
 
-      if (f_write(&SDFile, &snapshot, sizeof(snapshot), &bytesWritten) == FR_OK)
+      if (f_write(&SDFile, &Rocket.snapshot, sizeof(Rocket.snapshot), &bytesWritten) == FR_OK)
       {
         // This ensures data is saved even if the battery disconnects on landing.
         if (++syncCounter >= 50)
@@ -441,10 +413,10 @@ void vGpsRetrieveTask(void *argument)
 
   for (;;)
   {
-    if (currentFlightState == STATE_PAD)
+    if (Rocket.flightState == STATE_PAD)
     {
       // pass null terminator
-      snapshot.gps[0] = '\0';
+      Rocket.snapshot.gps[0] = '\0';
     }
 
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
@@ -462,9 +434,6 @@ void vGpsRetrieveTask(void *argument)
 void vControlTask(void *argument)
 {
   float setPoint = 0.0f;
-  const float Kp = 1.5f;
-  const float Ki = 0.05f;
-  const float Kd = 0.2f;
 
   float rollError = 0;
   static float integral = 0;
@@ -476,11 +445,8 @@ void vControlTask(void *argument)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (currentFlightState == STATE_CANARDS_ACTIVATE)
+    if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
     {
-      setPoint = 0.0f;
-      integral = 0;
-      output = 0;
 
       if (!startTimeCaptured)
       {
@@ -500,14 +466,14 @@ void vControlTask(void *argument)
         setPoint = 90.0f;
       }
 
-      rollError = setPoint - currentRocketState.rpy[0];
+      rollError = setPoint - Rocket.estimate.rpy[0];
 
       if (fabsf(output) < 20.0f)
       {
         integral += rollError * 0.01f;
       }
 
-      derivative = currentRawData.gyro[2];
+      derivative = Rocket.rawData.gyro[2];
 
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
 
@@ -516,7 +482,8 @@ void vControlTask(void *argument)
       if (output < -20.0f)
         output = -20.0f;
 
-      servoMove(output);
+      // TODO: Ensure servo.c is compiled and linked in your build system
+      // moveServo(output);
     }
     else
     {

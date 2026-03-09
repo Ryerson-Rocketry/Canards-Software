@@ -1,5 +1,5 @@
-#include <stm32f4xx_hal_tim.h>
-extern TIM_HandleTypeDef htim3;
+#include "tim.h"
+#include "Utils/servo.h"
 
 void moveServo(float angle)
 {

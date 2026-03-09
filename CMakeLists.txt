@@ -58,6 +58,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Inc/StateEstimation
     Core/Inc/Utils
     Core/Inc/Defs
+    Core/Inc/Configs
 )
 
 # Add project symbols (macros)

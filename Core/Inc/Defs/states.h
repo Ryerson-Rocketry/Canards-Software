@@ -1,4 +1,5 @@
 #include "main.h"
+#include "stdbool.h"
 typedef enum
 {
     STATE_PAD,
@@ -54,3 +55,12 @@ typedef enum
     READ_P_START_T,
     READ_T_COMPUTE
 } BaroStep_t;
+
+typedef struct
+{
+    FlightState_t flightState;  
+    RawSensorData_t rawData; 
+    RocketState_t estimate;
+    SDCardDataFormat_t snapshot;
+
+} Rocket_States_t;
