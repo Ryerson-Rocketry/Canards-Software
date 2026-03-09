@@ -6,13 +6,14 @@
             "type": "cortex-debug",
             "request": "launch",
             "servertype": "openocd",
-            "executable": "C:/Users/shado.ETHAN/Programming_CAD/C/Control_Systems/Canards/build/Debug/ControlSystems_Canards.elf",
+            "executable": "${command:cmake.launchTargetPath}", // Dynamic path
             "cwd": "${workspaceFolder}",
+            "armToolchainPath": "C:/ST/STM32CubeCLT_1.17.0/GNU-tools-for-STM32/bin", // Add this!
             "configFiles": [
                 "interface/stlink.cfg",
                 "target/stm32f4x.cfg"
             ],
-            "preLaunchTask": "STM32: Build Project",
+            "preLaunchTask": "CMake: build", // Change this to the standard CMake build task
             "runToEntryPoint": "main",
             "showDevDebugOutput": "none"
         }

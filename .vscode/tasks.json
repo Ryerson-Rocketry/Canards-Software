@@ -7,7 +7,7 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "${workspaceFolder}/build/Debug",
+                "${command:cmake.buildDirectory}",
                 "-j4"
             ],
             "group": {

@@ -14,6 +14,6 @@
 #define MS5611_ADC_REG 0x00
 #define MS5611_BASE_PROM_REG 0xA0
 
+void ms5611Run(uint16_t prom[8], float *p_out, float *t_out);
 HAL_StatusTypeDef ms5611Reset(void);
 HAL_StatusTypeDef ms5611ReadPROM(uint16_t out[8]);
-HAL_StatusTypeDef ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temperature);

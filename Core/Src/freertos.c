@@ -14,13 +14,15 @@
 #include "iwdg.h"
 #include "stdint.h"
 #include <stdio.h>
-#include <math.h>
 #include <stdbool.h>
 #include "iwdg.h"
 #include <string.h>
 #include "fatfs.h"
+#include <math.h>
 
 #define MAG_PIN_INT MAG_PIN_INT_VAL
+#define PI 3.14159265358979323846f
+#define GPS_BUF_SIZE 128
 
 const float MAG_X_OFFSET = 0.077f;
 const float MAG_Y_OFFSET = 0.147f;
@@ -32,18 +34,21 @@ extern char SDPath[4];
 extern SD_HandleTypeDef hsd;
 bool sdInitialized = false;
 
-const char flightDataFileName[] = "LOG.DAT";
+const char FLIGHT_DATA_FILE_NAME[] = "LOG.DAT";
+char gps_buffer[GPS_BUF_SIZE];
 
 SemaphoreHandle_t xMagDataReadySemaphore;
-SemaphoreHandle_t gI2c1Mutex;
 SemaphoreHandle_t xImuAccelReadySemaphore;
 SemaphoreHandle_t xImuGyroReadySemaphore;
+SemaphoreHandle_t gI2c1Mutex;
+SemaphoreHandle_t gSpi2Mutex;
 
 osThreadId_t readSensorTaskHandle;
-osThreadId_t altitudeEstimationTaskHandle;
-osThreadId_t launchDetectionTaskHandle;
-osThreadId_t heartBeatMonitorTaskHandle;
-osThreadId_t storeDataTaskHandle;
+osThreadId_t altEstTaskHandle;
+osThreadId_t launchDetTaskHandle;
+osThreadId_t dataStoreTaskHandle;
+osThreadId_t gpsRetrieveTaskHandle;
+osThreadId_t heartbeatTaskHandle;
 
 FlightState_t currentFlightState = STATE_PAD;
 RawSensorData_t currentRawData;
@@ -51,49 +56,56 @@ RocketState_t currentRocketState;
 SDCardDataFormat_t snapshot;
 
 volatile bool readSensorTask = false;
-volatile bool altitudeEstimationTask = false;
-volatile bool launchDetectionTask = false;
-volatile bool storeDataTask = false;
+volatile bool altEstTask = false;
+volatile bool launchDetTask = false;
+volatile bool dataStoreTask = false;
+volatile bool gpsRetrieveTask = false;
 
 const osThreadAttr_t readSensorTask_attributes = {
-    .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal5};
-const osThreadAttr_t altitudeEstimationTask_attributes = {
-    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
-const osThreadAttr_t launchDetectionTask_attributes = {
-    .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityNormal};
-const osThreadAttr_t storeDataTask_attributes = {
-    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal2};
-const osThreadAttr_t heartBeat_attributes = {
-    .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal1};
+    .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
+const osThreadAttr_t altEstTask_attributes = {
+    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
+const osThreadAttr_t launchDetTask_attributes = {
+    .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
+const osThreadAttr_t dataStoreTask_attributes = {
+    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
+const osThreadAttr_t gpsRetrieveTask_attributes = {
+    .name = "retrieveGpsCoords", .stack_size = 256 * 2, .priority = osPriorityAboveNormal1};
+const osThreadAttr_t heartbeat_attributes = {
+    .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal3};
 
-void ReadSensorTask(void *argument);
-void AltitudeEstimationTask(void *argument);
-void LaunchDetectionTask(void *argument);
-void HeartBeatMonitorTask(void *argument);
-void StoreDataTask(void *argument);
+void vReadSensorTask(void *argument);
+void vAltEstTask(void *argument);
+void vLaunchDetTask(void *argument);
+void vDataStoreTask(void *argument);
+void vGpsRetrieveTask(void *argument);
+void vHeartbeatTask(void *argument);
 
 void MX_FREERTOS_Init(void);
 
 void MX_FREERTOS_Init(void)
 {
   gI2c1Mutex = xSemaphoreCreateMutex();
+  gSpi2Mutex = xSemaphoreCreateMutex();
   xMagDataReadySemaphore = xSemaphoreCreateBinary();
   xImuAccelReadySemaphore = xSemaphoreCreateBinary();
   xImuGyroReadySemaphore = xSemaphoreCreateBinary();
 
   configASSERT(gI2c1Mutex);
+  configASSERT(gSpi2Mutex);
   configASSERT(xMagDataReadySemaphore);
   configASSERT(xImuAccelReadySemaphore);
   configASSERT(xImuGyroReadySemaphore);
 
-  readSensorTaskHandle = osThreadNew(ReadSensorTask, NULL, &readSensorTask_attributes);
-  altitudeEstimationTaskHandle = osThreadNew(AltitudeEstimationTask, NULL, &altitudeEstimationTask_attributes);
-  launchDetectionTaskHandle = osThreadNew(LaunchDetectionTask, NULL, &launchDetectionTask_attributes);
-  heartBeatMonitorTaskHandle = osThreadNew(HeartBeatMonitorTask, NULL, &heartBeat_attributes);
-  storeDataTaskHandle = osThreadNew(StoreDataTask, NULL, &storeDataTask_attributes);
+  readSensorTaskHandle = osThreadNew(vReadSensorTask, NULL, &readSensorTask_attributes);
+  altEstTaskHandle = osThreadNew(vAltEstTask, NULL, &altEstTask_attributes);
+  launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
+  dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
+  gpsRetrieveTaskHandle = osThreadNew(vGpsRetrieveTask, NULL, &gpsRetrieveTask_attributes);
+  heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
 }
 
-void ReadSensorTask(void *argument)
+void vReadSensorTask(void *argument)
 {
   uint32_t freq = HAL_RCC_GetSysClockFreq();
   printf("CPU Freq: %lu Hz\r\n", freq);
@@ -152,26 +164,16 @@ void ReadSensorTask(void *argument)
 
   for (;;)
   {
-    int32_t pressure_raw = 0;
-    int32_t temperature_raw = 0;
-
     magStatus = magGetData(xMagDataReadySemaphore, currentRawData.mag);
-    baroStatus = ms5611GetPressureAndTemp(prom, &pressure_raw, &temperature_raw);
-
-    if (baroStatus == HAL_OK)
-    {
-      currentRawData.pressure = pressure_raw;
-      currentRawData.temperature = temperature_raw;
-    }
+    ms5611Run(prom, &currentRawData.pressure, &currentRawData.temperature);
 
     if (magStatus == HAL_OK)
     {
       float x_cal = currentRawData.mag[0] - MAG_X_OFFSET;
       float y_cal = currentRawData.mag[1] - MAG_Y_OFFSET;
 
-      // Calculate heading
       float heading_rad = atan2f(y_cal, x_cal);
-      float heading_deg = heading_rad * (180.0f / 3.1415926535f);
+      float heading_deg = heading_rad * (180.0f / PI);
 
       // Normalize to 0-360
       if (heading_deg < 0)
@@ -206,15 +208,15 @@ void ReadSensorTask(void *argument)
 
     currentRawData.timestamp = osKernelGetTickCount();
 
-    xTaskNotifyGive(launchDetectionTaskHandle);
-    xTaskNotifyGive(altitudeEstimationTaskHandle);
+    xTaskNotifyGive(launchDetTaskHandle);
+    xTaskNotifyGive(altEstTaskHandle);
 
     readSensorTask = true;
     osDelay(10);
   }
 }
 
-void AltitudeEstimationTask(void *argument)
+void vAltEstTask(void *argument)
 {
   float dt = 0.0f;
   float processNoise[2][2] = {{0.01f, 0.0f}, {0.0f, 0.01f}};
@@ -233,7 +235,7 @@ void AltitudeEstimationTask(void *argument)
 
     if (notification == 0)
     {
-      altitudeEstimationTask = true;
+      altEstTask = true;
       continue;
     }
 
@@ -258,20 +260,19 @@ void AltitudeEstimationTask(void *argument)
     altPredict(dt, &currentRocketState.position, &currentRocketState.velocity, accel_in_m_s2, processNoise, systemCov, stateTransition);
     altUpdate(&currentRocketState.position, &currentRocketState.velocity, pressureToAltitude(currentRawData.pressure, SEA_LEVEL_PA), systemCov, baroAltVar);
 
-    // update struct
     currentRocketState.timestamp = osKernelGetTickCount();
     currentRocketState.acceleration = accel_in_m_s2;
-    currentRocketState.pitch += currentRawData.gyro[0] * dt;
-    currentRocketState.yaw += currentRawData.gyro[1] * dt;
-    currentRocketState.roll += currentRawData.gyro[2] * dt;
-    currentRocketState.tilt_angle = sqrtf(powf(currentRocketState.pitch, 2) + powf(currentRocketState.yaw, 2));
+    currentRocketState.rpy[0] += currentRawData.gyro[2] * dt;
+    currentRocketState.rpy[1] += currentRawData.gyro[0] * dt;
+    currentRocketState.rpy[2] += currentRawData.gyro[1] * dt;
+    currentRocketState.tilt_angle = sqrtf(powf(currentRocketState.rpy[1], 2) + powf(currentRocketState.rpy[2], 2));
 
-    xTaskNotifyGive((TaskHandle_t)storeDataTaskHandle);
-    altitudeEstimationTask = true;
+    xTaskNotifyGive((TaskHandle_t)dataStoreTaskHandle);
+    altEstTask = true;
   }
 }
 
-void LaunchDetectionTask(void *argument)
+void vLaunchDetTask(void *argument)
 {
 
   float accel_z;
@@ -287,7 +288,7 @@ void LaunchDetectionTask(void *argument)
 
     if (notification == 0)
     {
-      launchDetectionTask = true;
+      launchDetTask = true;
       continue;
     }
 
@@ -303,9 +304,10 @@ void LaunchDetectionTask(void *argument)
     switch (currentFlightState)
     {
     case STATE_PAD:
-      currentRocketState.pitch = 0.0f;
-      currentRocketState.yaw = 0.0f;
-      currentRocketState.roll = 0.0f;
+      // rpy
+      currentRocketState.rpy[0] = 0.0f;
+      currentRocketState.rpy[1] = 0.0f;
+      currentRocketState.rpy[2] = 0.0f;
       currentRocketState.tilt_angle = 0.0f;
 
       if (accel_z >= 4000.0f)
@@ -350,11 +352,11 @@ void LaunchDetectionTask(void *argument)
       printf("Invalid state somehow...");
       break;
     }
-    launchDetectionTask = true;
+    launchDetTask = true;
   }
 }
 
-void StoreDataTask(void *argument)
+void vDataStoreTask(void *argument)
 {
   UINT bytesWritten;
   uint32_t syncCounter = 0;
@@ -365,13 +367,11 @@ void StoreDataTask(void *argument)
     sdInitialized = false;
   }
 
-  FRESULT res = f_open(&SDFile, flightDataFileName, FA_OPEN_APPEND | FA_WRITE);
+  FRESULT res = f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE);
   if (res == FR_OK)
   {
     sdInitialized = true;
     printf("SD File Ready: Writing Only\n");
-
-    // Hardware info trace
     printf("SD Card Information:\n");
     printf("Block size  : %lu\n", hsd.SdCard.BlockSize);
     printf("Block nmbr  : %lu\n", hsd.SdCard.BlockNbr);
@@ -390,49 +390,74 @@ void StoreDataTask(void *argument)
     if (sdInitialized && notification > 0)
     {
       // Copy current data to snapshot for thread-safe writing
+      taskENTER_CRITICAL();
       memcpy(snapshot.accel, currentRawData.accel, sizeof(snapshot.accel));
       memcpy(snapshot.gyro, currentRawData.gyro, sizeof(snapshot.gyro));
       memcpy(snapshot.mag, currentRawData.mag, sizeof(snapshot.mag));
+      memcpy(snapshot.gps, gps_buffer, sizeof(gps_buffer));
+      taskEXIT_CRITICAL();
 
       snapshot.pressure = currentRawData.pressure;
       snapshot.position = currentRocketState.position;
       snapshot.velocity = currentRocketState.velocity;
       snapshot.tiltAngle = currentRocketState.tilt_angle;
-      snapshot.pitch = currentRocketState.pitch;
-      snapshot.yaw = currentRocketState.yaw;
-      snapshot.roll = currentRocketState.roll;
       snapshot.timestamp = osKernelGetTickCount();
 
-      // 3. Write binary data
       if (f_write(&SDFile, &snapshot, sizeof(snapshot), &bytesWritten) == FR_OK)
       {
         // This ensures data is saved even if the battery disconnects on landing.
-        if (++syncCounter >= 1)
+        if (++syncCounter >= 50)
         {
           f_sync(&SDFile);
           syncCounter = 0;
-          HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); // Visual heartbeat
+          HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
         }
       }
     }
-    storeDataTask = true;
+    dataStoreTask = true;
   }
 }
 
-void HeartBeatMonitorTask(void *argument)
+void vGpsRetrieveTask(void *argument)
+{
+  char gps_buffer[GPS_BUF_SIZE];
+
+  for (;;)
+  {
+    if (currentFlightState == STATE_PAD)
+    {
+      // pass null terminator
+      gps_buffer[0] = '\0';
+    }
+
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+      // read gps
+
+      xSemaphoreGive(gSpi2Mutex);
+    }
+
+    gpsRetrieveTask = true;
+    osDelay(100);
+  }
+}
+
+void vHeartbeatTask(void *argument)
 {
   for (;;)
   {
-    if (readSensorTask && altitudeEstimationTask && launchDetectionTask && storeDataTask)
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && gpsRetrieveTask)
     {
       HAL_IWDG_Refresh(&hiwdg); // refresh the watchdog
       // reset flags for the next check
       readSensorTask = false;
-      altitudeEstimationTask = false;
-      launchDetectionTask = false;
-      storeDataTask = false;
+      altEstTask = false;
+      launchDetTask = false;
+      dataStoreTask = false;
+      gpsRetrieveTask = false;
     }
-    osDelay(100);
+    osDelay(pdMS_TO_TICKS(100));
   }
 }
 
@@ -453,7 +478,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     xSemaphoreGiveFromISR(xImuGyroReadySemaphore, &xHigherPriorityTaskWoken);
   }
 
-  /* Force a context switch if a higher priority task was woken */
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
@@ -462,7 +486,6 @@ int _write(int file, char *ptr, int len)
   int i = 0;
   for (i = 0; i < len; i++)
   {
-    // Write character to ITM Stimulus Port 0
     ITM_SendChar((*ptr++));
   }
   return len;

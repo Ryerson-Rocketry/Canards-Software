@@ -3,7 +3,9 @@
 #include "math.h"
 #include "cmsis_os.h"
 #include "FreeRTOS.h"
-#include "stm32f4xx_hal_def.h"
+#include "semphr.h"
+
+extern SemaphoreHandle_t gSpi2Mutex;
 
 #define BARO_CS_GPIO_PORT BARO_CS_PORT
 #define BARO_CS_GPIO_PIN BARO_CS_PIN
@@ -20,21 +22,32 @@ static inline void BARO_CS_HIGH(void)
 
 static HAL_StatusTypeDef ms5611Write(uint8_t val)
 {
-    BARO_CS_LOW();
-    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &val, sizeof(val), 100);
-    BARO_CS_HIGH();
+    HAL_StatusTypeDef status = HAL_TIMEOUT;
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        BARO_CS_LOW();
+        status = HAL_SPI_Transmit(&hspi2, &val, sizeof(val), 100);
+        BARO_CS_HIGH();
+        xSemaphoreGive(gSpi2Mutex);
+    }
+
     return status;
 }
 
 static HAL_StatusTypeDef ms5611Read(uint8_t reg, uint8_t *val, int length)
 {
-    BARO_CS_LOW();
-    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi2, &reg, 1, 100);
-    if (status == HAL_OK)
+    HAL_StatusTypeDef status = HAL_TIMEOUT;
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-        status = HAL_SPI_Receive(&hspi2, val, length, 100);
+        BARO_CS_LOW();
+        status = HAL_SPI_Transmit(&hspi2, &reg, 1, 100);
+        if (status == HAL_OK)
+        {
+            status = HAL_SPI_Receive(&hspi2, val, length, 100);
+        }
+        BARO_CS_HIGH();
+        xSemaphoreGive(gSpi2Mutex);
     }
-    BARO_CS_HIGH();
     return status;
 }
 
@@ -128,62 +141,61 @@ HAL_StatusTypeDef ms5611ReadPROM(uint16_t out[8])
     return HAL_ERROR;
 }
 
-uint32_t ms5611ReadUncompensatedPressure(void)
+void ms5611Run(uint16_t prom[8], float *p_out, float *t_out)
 {
-    ms5611Write(MS5611_OSR_D1_4096_REG);
-    osDelay(10);
-    return ms5611ReadADC();
-}
+    static int step = 0;
+    static uint32_t D1 = 0, D2 = 0;
 
-uint32_t ms5611ReadUncompensatedTemp(void)
-{
-    ms5611Write(MS5611_OSR_D2_4096_REG);
-    osDelay(10);
-    return ms5611ReadADC();
-}
-
-HAL_StatusTypeDef ms5611GetPressureAndTemp(uint16_t prom[8], int32_t *pressure, int32_t *temperature)
-{
-    if (prom[1] == 0 && prom[2] == 0)
+    switch (step)
     {
-        *pressure = 0;
-        *temperature = 0;
-        return HAL_ERROR;
-    }
+    case 0:
+        ms5611Write(MS5611_OSR_D1_4096_REG);
+        step = 1;
+        break;
 
-    // read digital pressure and temp
-    uint32_t D1 = ms5611ReadUncompensatedPressure();
-    uint32_t D2 = ms5611ReadUncompensatedTemp();
+    case 1:
+        D1 = ms5611ReadADC();
+        ms5611Write(MS5611_OSR_D2_4096_REG);
+        step = 2;
+        break;
 
-    // calc temp
-    int32_t dT = (int32_t)D2 - ((int32_t)prom[5] << 8);
-    int32_t TEMP = 2000 + (((int64_t)dT * (int64_t)prom[6]) >> 23);
+    case 2:
+        D2 = ms5611ReadADC();
 
-    // calc temp compensated pressure
-    int64_t OFF = ((int64_t)prom[2] << 16) + (((int64_t)prom[4] * dT) / (1 << 7));
-    int64_t SENS = ((int64_t)prom[1] << 15) + (((int64_t)prom[3] * dT) / (1 << 8));
+        int32_t dT = (int32_t)D2 - ((int32_t)prom[5] << 8);
+        int32_t TEMP = 2000 + (((int64_t)dT * (int64_t)prom[6]) >> 23);
 
-    if (TEMP < 2000)
-    {
-        int64_t T2 = ((int64_t)dT * (int64_t)dT) >> 31;
-        int64_t OFF2 = (5 * ((int64_t)TEMP - 2000) * ((int64_t)TEMP - 2000)) >> 1;
-        int64_t SENS2 = (5 * ((int64_t)TEMP - 2000) * ((int64_t)TEMP - 2000)) >> 2;
+        int64_t OFF = ((int64_t)prom[2] << 16) + (((int64_t)prom[4] * (int64_t)dT) >> 7);
+        int64_t SENS = ((int64_t)prom[1] << 15) + (((int64_t)prom[3] * (int64_t)dT) >> 8);
 
-        if (TEMP < -1500)
+        if (TEMP < 2000)
         {
-            int64_t diff = (int64_t)TEMP + 1500;
-            OFF2 += 7 * (diff * diff);
-            SENS2 += (11 * (diff * diff)) >> 1;
+            int64_t T2 = ((int64_t)dT * (int64_t)dT) >> 31;
+            int64_t OFF2 = (5 * ((int64_t)TEMP - 2000) * ((int64_t)TEMP - 2000)) >> 1;
+            int64_t SENS2 = (5 * ((int64_t)TEMP - 2000) * ((int64_t)TEMP - 2000)) >> 2;
+
+            if (TEMP < -1500)
+            {
+                int64_t diff = (int64_t)TEMP + 1500;
+                OFF2 += 7 * (diff * diff);
+                SENS2 += (11 * (diff * diff)) >> 1;
+            }
+
+            TEMP -= (int32_t)T2;
+            OFF -= OFF2;
+            SENS -= SENS2;
         }
 
-        TEMP -= (int32_t)T2;
-        OFF -= OFF2;
-        SENS -= SENS2;
+        int32_t P = (int32_t)(((((int64_t)D1 * SENS) >> 21) - OFF) >> 15);
+
+        *p_out = (float)P;
+        *t_out = (float)TEMP / 100.0f;
+
+        step = 0;
+        break;
+
+    default:
+        step = 0;
+        break;
     }
-
-    int32_t P = (int32_t)(((((int64_t)D1 * SENS) >> 21) - OFF) >> 15);
-
-    *pressure = P;       // in Pa
-    *temperature = TEMP; // in 0.01 C
-    return HAL_OK;
 }
