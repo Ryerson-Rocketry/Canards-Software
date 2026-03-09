@@ -282,10 +282,11 @@ void vLaunchDetTask(void *argument)
 {
 
   float accel_z;
-  uint32_t accel_start_time = 0;
+  static uint32_t accel_start_time = 0;
   bool threshold_active = false;
-  uint32_t burnoutStartTime = 0;
+  static uint32_t burnoutStartTime = 0;
   static bool launch_recorded = false;
+  static uint32_t canardActivationTime = 0;
 
   for (;;)
   {
@@ -349,11 +350,21 @@ void vLaunchDetTask(void *argument)
       {
         currentFlightState = STATE_CANARDS_ACTIVATE;
         printf("CANARDS ACTIVE\r\n");
+        canardActivationTime = now;
       }
       break;
     case STATE_CANARDS_ACTIVATE:
       HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+      if (currentRocketState.velocity <= 50.0f && (now - canardActivationTime) >= pdMS_TO_TICKS(15000))
+      {
+        currentFlightState = STATE_DESCENT;
+      }
       break;
+
+    case STATE_DESCENT:
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+      break;
+
     default:
       printf("Invalid state somehow...");
       break;
@@ -455,7 +466,9 @@ void vControlTask(void *argument)
   const float Ki = 0.05f;
   const float Kd = 0.2f;
 
-  float rollError, integral = 0, derivative, output;
+  float rollError = 0;
+  static float integral = 0;
+  float derivative, output = 0;
   uint32_t activationStartTime = 0;
   bool startTimeCaptured = false;
 
@@ -465,35 +478,39 @@ void vControlTask(void *argument)
 
     if (currentFlightState == STATE_CANARDS_ACTIVATE)
     {
+      setPoint = 0.0f;
+      integral = 0;
+      output = 0;
+
       if (!startTimeCaptured)
       {
         activationStartTime = osKernelGetTickCount();
         startTimeCaptured = true;
-        integral = 0; // Reset integral at the exact moment of activation
+        integral = 0;
       }
 
-      // 5-second delay
-      if ((osKernelGetTickCount() - activationStartTime) >= pdMS_TO_TICKS(5000))
+      uint32_t elapsedMillis = osKernelGetTickCount() - activationStartTime;
+
+      if ((elapsedMillis % 10000) < 5000)
       {
-        setPoint = 90.0f;
+        setPoint = 0.0f;
       }
       else
       {
-        setPoint = 0.0f;
+        setPoint = 90.0f;
       }
 
       rollError = setPoint - currentRocketState.rpy[0];
 
-      // Basic Integral Anti-Windup: Only integrate if output isn't saturated
       if (fabsf(output) < 20.0f)
       {
         integral += rollError * 0.01f;
       }
 
       derivative = currentRawData.gyro[2];
+
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
 
-      // Clamp output to physical servo limits
       if (output > 20.0f)
         output = 20.0f;
       if (output < -20.0f)
@@ -506,7 +523,7 @@ void vControlTask(void *argument)
       startTimeCaptured = false;
       setPoint = 0.0f;
       integral = 0;
-      // servoMove(0);
+      output = 0;
     }
 
     controlTask = true;

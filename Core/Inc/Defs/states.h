@@ -5,6 +5,7 @@ typedef enum
     STATE_BOOST,
     STATE_BURNOUT,
     STATE_CANARDS_ACTIVATE,
+    STATE_DESCENT,
 } FlightState_t;
 
 typedef enum
@@ -12,8 +13,7 @@ typedef enum
     ROLL = 0,
     PITCH = 1,
     YAW = 2
-}
-RPY_t;
+} RPY_t;
 
 typedef struct
 {
