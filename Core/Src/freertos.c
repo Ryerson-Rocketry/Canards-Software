@@ -49,6 +49,7 @@ osThreadId_t launchDetTaskHandle;
 osThreadId_t dataStoreTaskHandle;
 osThreadId_t gpsRetrieveTaskHandle;
 osThreadId_t heartbeatTaskHandle;
+osThreadId_t controlTaskHandle;
 
 FlightState_t currentFlightState = STATE_PAD;
 RawSensorData_t currentRawData;
@@ -60,6 +61,7 @@ volatile bool altEstTask = false;
 volatile bool launchDetTask = false;
 volatile bool dataStoreTask = false;
 volatile bool gpsRetrieveTask = false;
+volatile bool controlTask = false;
 
 const osThreadAttr_t readSensorTask_attributes = {
     .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
@@ -71,6 +73,8 @@ const osThreadAttr_t dataStoreTask_attributes = {
     .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
 const osThreadAttr_t gpsRetrieveTask_attributes = {
     .name = "retrieveGpsCoords", .stack_size = 256 * 2, .priority = osPriorityAboveNormal1};
+const osThreadAttr_t controlTask_attributes = {
+    .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal3};
 
@@ -79,8 +83,8 @@ void vAltEstTask(void *argument);
 void vLaunchDetTask(void *argument);
 void vDataStoreTask(void *argument);
 void vGpsRetrieveTask(void *argument);
+void vControlTask(void *argument);
 void vHeartbeatTask(void *argument);
-
 void MX_FREERTOS_Init(void);
 
 void MX_FREERTOS_Init(void)
@@ -102,6 +106,7 @@ void MX_FREERTOS_Init(void)
   launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
   dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
   gpsRetrieveTaskHandle = osThreadNew(vGpsRetrieveTask, NULL, &gpsRetrieveTask_attributes);
+  controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
   heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
 }
 
@@ -267,6 +272,7 @@ void vAltEstTask(void *argument)
     currentRocketState.rpy[2] += currentRawData.gyro[1] * dt;
     currentRocketState.tilt_angle = sqrtf(powf(currentRocketState.rpy[1], 2) + powf(currentRocketState.rpy[2], 2));
 
+    xTaskNotifyGive(controlTaskHandle);
     xTaskNotifyGive((TaskHandle_t)dataStoreTaskHandle);
     altEstTask = true;
   }
@@ -346,7 +352,7 @@ void vLaunchDetTask(void *argument)
       }
       break;
     case STATE_CANARDS_ACTIVATE:
-      // turn the gpio pin to high for raspberry pi video recording
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
       break;
     default:
       printf("Invalid state somehow...");
@@ -395,6 +401,7 @@ void vDataStoreTask(void *argument)
       memcpy(snapshot.gyro, currentRawData.gyro, sizeof(snapshot.gyro));
       memcpy(snapshot.mag, currentRawData.mag, sizeof(snapshot.mag));
       memcpy(snapshot.gps, gps_buffer, sizeof(gps_buffer));
+      memcpy(snapshot.rpy, currentRocketState.rpy, sizeof(currentRocketState.rpy));
       taskEXIT_CRITICAL();
 
       snapshot.pressure = currentRawData.pressure;
@@ -420,14 +427,13 @@ void vDataStoreTask(void *argument)
 
 void vGpsRetrieveTask(void *argument)
 {
-  char gps_buffer[GPS_BUF_SIZE];
 
   for (;;)
   {
     if (currentFlightState == STATE_PAD)
     {
       // pass null terminator
-      gps_buffer[0] = '\0';
+      snapshot.gps[0] = '\0';
     }
 
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
@@ -439,6 +445,71 @@ void vGpsRetrieveTask(void *argument)
 
     gpsRetrieveTask = true;
     osDelay(100);
+  }
+}
+
+void vControlTask(void *argument)
+{
+  float setPoint = 0.0f;
+  const float Kp = 1.5f;
+  const float Ki = 0.05f;
+  const float Kd = 0.2f;
+
+  float rollError, integral = 0, derivative, output;
+  uint32_t activationStartTime = 0;
+  bool startTimeCaptured = false;
+
+  for (;;)
+  {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (currentFlightState == STATE_CANARDS_ACTIVATE)
+    {
+      if (!startTimeCaptured)
+      {
+        activationStartTime = osKernelGetTickCount();
+        startTimeCaptured = true;
+        integral = 0; // Reset integral at the exact moment of activation
+      }
+
+      // 5-second delay
+      if ((osKernelGetTickCount() - activationStartTime) >= pdMS_TO_TICKS(5000))
+      {
+        setPoint = 90.0f;
+      }
+      else
+      {
+        setPoint = 0.0f;
+      }
+
+      rollError = setPoint - currentRocketState.rpy[0];
+
+      // Basic Integral Anti-Windup: Only integrate if output isn't saturated
+      if (fabsf(output) < 20.0f)
+      {
+        integral += rollError * 0.01f;
+      }
+
+      derivative = currentRawData.gyro[2];
+      output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
+
+      // Clamp output to physical servo limits
+      if (output > 20.0f)
+        output = 20.0f;
+      if (output < -20.0f)
+        output = -20.0f;
+
+      servoMove(output);
+    }
+    else
+    {
+      startTimeCaptured = false;
+      setPoint = 0.0f;
+      integral = 0;
+      // servoMove(0);
+    }
+
+    controlTask = true;
   }
 }
 
@@ -456,6 +527,7 @@ void vHeartbeatTask(void *argument)
       launchDetTask = false;
       dataStoreTask = false;
       gpsRetrieveTask = false;
+      controlTask = false;
     }
     osDelay(pdMS_TO_TICKS(100));
   }
