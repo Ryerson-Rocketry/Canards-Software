@@ -68,7 +68,7 @@ const osThreadAttr_t dataStoreTask_attributes = {
 const osThreadAttr_t gpsRetrieveTask_attributes = {
     .name = "retrieveGpsCoords", .stack_size = 256 * 2, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
-    .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
+    .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal3};
 
@@ -110,12 +110,10 @@ void vReadSensorTask(void *argument)
   printf("CPU Freq: %lu Hz\r\n", freq);
 
   uint16_t prom[8] = {0};
-  float temp_c = 0;
   int counter = 0;
 
   HAL_StatusTypeDef status = HAL_ERROR;
   HAL_StatusTypeDef magStatus = HAL_ERROR;
-  HAL_StatusTypeDef baroStatus = HAL_ERROR;
 
   HAL_StatusTypeDef initStatus = magInit();
   HAL_StatusTypeDef baroReset = ms5611Reset();
@@ -182,12 +180,6 @@ void vReadSensorTask(void *argument)
 
       printf("Heading: %.2f | X: %.3f, Y: %.3f\r\n",
              heading_deg, x_cal, y_cal);
-    }
-
-    if (baroStatus == HAL_OK)
-    {
-      temp_c = (float)Rocket.rawData.temperature / 100.0f;
-      printf("Pressure: %.2f, Temp: %.2f\r\n", Rocket.rawData.pressure, temp_c);
     }
 
     if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
@@ -507,6 +499,8 @@ void vControlTask(void *argument)
         output = -20.0f;
 
       // TODO: Ensure servo.c is compiled and linked in your build system
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+
       moveServo(2000);
     }
     else
@@ -559,14 +553,4 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   }
 
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-}
-
-int _write(int file, char *ptr, int len)
-{
-  int i = 0;
-  for (i = 0; i < len; i++)
-  {
-    ITM_SendChar((*ptr++));
-  }
-  return len;
 }

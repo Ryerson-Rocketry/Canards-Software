@@ -93,7 +93,6 @@ HAL_StatusTypeDef triggerAndWait(SemaphoreHandle_t sem)
     read(MAG_STATUS_REG, &status, 1);
     if (!(status & 0x01))
     { // Check Meas_M_Done bit
-        printf("[DEBUG]: Interrupt fired but hardware not ready!\r\n");
         return HAL_BUSY;
     }
 
