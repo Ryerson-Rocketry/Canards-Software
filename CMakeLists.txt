@@ -50,6 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Drivers/lsm6dso32_app.c
     Core/Src/StateEstimation/altitude_estimation.c
     Core/Src/Utils/math_utils.c
+    Core/Src/Utils/servo.c
 )
 
 # Add include paths

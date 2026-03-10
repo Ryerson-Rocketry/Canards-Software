@@ -6,16 +6,16 @@
             "type": "cortex-debug",
             "request": "launch",
             "servertype": "openocd",
-            "executable": "${command:cmake.launchTargetPath}", // Dynamic path
+            "executable": "${workspaceFolder}/build/debug/ControlSystems_Canards.elf", // Dynamic path
             "cwd": "${workspaceFolder}",
             "armToolchainPath": "C:/ST/STM32CubeCLT_1.17.0/GNU-tools-for-STM32/bin", // Add this!
             "configFiles": [
                 "interface/stlink.cfg",
                 "target/stm32f4x.cfg"
             ],
-            "preLaunchTask": "CMake: build", // Change this to the standard CMake build task
+            // "preLaunchTask": "CMake: build", // Change this to the standard CMake build task
             "runToEntryPoint": "main",
-            "showDevDebugOutput": "none"
+            "showDevDebugOutput": "raw",
         }
     ]
 }

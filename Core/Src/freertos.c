@@ -463,11 +463,13 @@ void vControlTask(void *argument)
   uint32_t activationStartTime = 0;
   bool startTimeCaptured = false;
 
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
+    if (Rocket.flightState != STATE_CANARDS_ACTIVATE)
     {
 
       if (!startTimeCaptured)
@@ -505,7 +507,7 @@ void vControlTask(void *argument)
         output = -20.0f;
 
       // TODO: Ensure servo.c is compiled and linked in your build system
-      // moveServo(output);
+      moveServo(2000);
     }
     else
     {
