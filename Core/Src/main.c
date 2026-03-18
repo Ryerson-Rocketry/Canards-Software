@@ -85,7 +85,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  __HAL_DBGMCU_FREEZE_IWDG();
   /* USER CODE END Init */
 
   /* Configure the system clock */

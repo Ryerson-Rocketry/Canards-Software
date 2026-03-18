@@ -461,6 +461,7 @@ void vControlTask(void *argument)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+    // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
     if (Rocket.flightState != STATE_CANARDS_ACTIVATE)
     {
 
@@ -498,9 +499,7 @@ void vControlTask(void *argument)
       if (output < -20.0f)
         output = -20.0f;
 
-      // TODO: Ensure servo.c is compiled and linked in your build system
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-
       moveServo(2000);
     }
     else

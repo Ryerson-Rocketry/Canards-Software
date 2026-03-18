@@ -9,6 +9,7 @@ void moveServo(float angle)
     float pwmVal = angle;
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, pwmVal);
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwmVal);
-    osDelay(1);
+    osDelay(100);
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 1000);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 1000);
 }
