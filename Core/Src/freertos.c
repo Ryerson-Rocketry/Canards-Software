@@ -5,6 +5,7 @@
 #include "StateEstimation/altitude_estimation.h"
 #include "Utils/math_utils.h"
 #include "Defs/states.h"
+#include "stm32f4xx_hal_def.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -21,14 +22,13 @@
 #include <math.h>
 #include "Configs/flight_configs.h"
 #include "Utils/servo.h"
+#include "Drivers/ubloxm9n.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
 extern char SDPath[4];
 extern SD_HandleTypeDef hsd;
 bool sdInitialized = false;
-
-char gps_buffer[GPS_BUF_SIZE];
 
 SemaphoreHandle_t xMagDataReadySemaphore;
 SemaphoreHandle_t xImuAccelReadySemaphore;
@@ -66,7 +66,7 @@ const osThreadAttr_t launchDetTask_attributes = {
 const osThreadAttr_t dataStoreTask_attributes = {
     .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
 const osThreadAttr_t gpsRetrieveTask_attributes = {
-    .name = "retrieveGpsCoords", .stack_size = 256 * 2, .priority = osPriorityAboveNormal1};
+    .name = "retrieveGpsCoords", .stack_size = 512 * 2, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
     .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
@@ -162,7 +162,13 @@ void vReadSensorTask(void *argument)
   for (;;)
   {
     magStatus = magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
-    ms5611Run(prom, &Rocket.rawData.pressure, &Rocket.rawData.temperature);
+
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+      SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_4, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE);
+      ms5611Run(prom, &Rocket.rawData.pressure, &Rocket.rawData.temperature);
+      xSemaphoreGive(gSpi2Mutex);
+    }
 
     if (magStatus == HAL_OK)
     {
@@ -397,7 +403,7 @@ void vDataStoreTask(void *argument)
       memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
       memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
       memcpy(Rocket.snapshot.mag, Rocket.rawData.mag, sizeof(Rocket.snapshot.mag));
-      memcpy(Rocket.snapshot.gps, gps_buffer, sizeof(gps_buffer));
+      memcpy(&Rocket.snapshot.gps, &Rocket.gpsState, sizeof(GPS));
       memcpy(Rocket.snapshot.rpy, Rocket.estimate.rpy, sizeof(Rocket.estimate.rpy));
       taskEXIT_CRITICAL();
 
@@ -425,19 +431,46 @@ void vDataStoreTask(void *argument)
 void vGpsRetrieveTask(void *argument)
 {
 
+  uint8_t buffer[GPS_BUF_SIZE];
+  uint8_t dummyTx[GPS_BUF_SIZE];
+  memset(dummyTx, 0xFF, GPS_BUF_SIZE);
+  HAL_StatusTypeDef status = GPSInit();
+  if (status != HAL_OK)
+  {
+    printf("Error: Unable to talk to GPS");
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
+    osDelay(100);
+  }
+
   for (;;)
   {
-    if (Rocket.flightState == STATE_PAD)
-    {
-      // pass null terminator
-      Rocket.snapshot.gps[0] = '\0';
-    }
+    // if (Rocket.flightState == STATE_PAD)
+    // {
+    //   gpsRetrieveTask = true;
+    //   osDelay(pdMS_TO_TICKS(500));
+    //   continue;
+    // }
 
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-      // read gps
-
+      SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_64, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE);
+      status = GPSRead(buffer, dummyTx, &Rocket.gpsState);
+      SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_4, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE);
       xSemaphoreGive(gSpi2Mutex);
+      bool foundStart = false;
+      for (int i = 0; i < GPS_BUF_SIZE; i++)
+      {
+        if (buffer[i] == '$')
+        {
+          printf("NMEA Start Found at index %d!\r\n", i);
+          foundStart = true;
+          break;
+        }
+      }
+      if (!foundStart && buffer[0] != 0xFF)
+      {
+        printf("Received bytes, but no NMEA sentence start found.\r\n");
+      }
     }
 
     gpsRetrieveTask = true;

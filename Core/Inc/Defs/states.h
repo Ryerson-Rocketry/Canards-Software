@@ -1,5 +1,8 @@
+#pragma once
 #include "main.h"
 #include "stdbool.h"
+#include <stdint.h>
+
 typedef enum
 {
     STATE_PAD,
@@ -37,6 +40,27 @@ typedef struct
     uint32_t timestamp;
 } RocketState_t;
 
+typedef enum
+{
+    START_P,
+    READ_P_START_T,
+    READ_T_COMPUTE
+} BaroStep_t;
+
+typedef struct NMEA_DATA
+{
+    double latitude;      // latitude in decimal degrees
+    char latSide;         // N or S
+    double longitude;     // longitude in decimal degrees
+    char lonSide;         // E or W
+    float altitude;       // altitude in meters
+    float speed;          // Ground speed in m/s (Added for GPRMC)
+    float hdop;           // horizontal dilution of precision
+    int satelliteCount;   // number of satellites
+    int fix;              // 1 = fix, 0 = no fix
+    char lastMeasure[11]; // hhmmss.ss + null terminator
+} GPS;
+
 // 4-byte aligned for DMA
 typedef struct __attribute__((packed))
 {
@@ -45,22 +69,16 @@ typedef struct __attribute__((packed))
     float mag[3];
     float position, velocity, pressure, tiltAngle;
     float rpy[3];
-    char gps[128];
+    GPS gps;
     uint32_t timestamp;
 } SDCardDataFormat_t;
 
-typedef enum
-{
-    START_P,
-    READ_P_START_T,
-    READ_T_COMPUTE
-} BaroStep_t;
-
 typedef struct
 {
-    FlightState_t flightState;  
-    RawSensorData_t rawData; 
+    FlightState_t flightState;
+    RawSensorData_t rawData;
     RocketState_t estimate;
     SDCardDataFormat_t snapshot;
+    GPS gpsState;
 
 } Rocket_States_t;

@@ -51,6 +51,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/StateEstimation/altitude_estimation.c
     Core/Src/Utils/math_utils.c
     Core/Src/Utils/servo.c
+    Core/Src/Drivers/ubloxm9n.c
+    Core/Src/Utils/nmea_parse.c
 )
 
 # Add include paths

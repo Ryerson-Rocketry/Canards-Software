@@ -207,5 +207,25 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef *spiHandle)
 }
 
 /* USER CODE BEGIN 1 */
+/* USER CODE BEGIN 1 */
+/**
+ * @brief Switches SPI2 configuration on the fly for different peripherals.
+ * @param prescaler: SPI_BAUDRATEPRESCALER_X
+ * @param polarity: SPI_POLARITY_LOW or SPI_POLARITY_HIGH
+ * @param phase: SPI_PHASE_1EDGE or SPI_PHASE_2EDGE
+ */
+void SPI2_Switch_Settings(uint32_t prescaler, uint32_t polarity, uint32_t phase)
+{
+  // 1. Disable SPI2 before modifying configuration
+  __HAL_SPI_DISABLE(&hspi2);
 
-/* USER CODE END 1 */
+  // 2. Clear BaudRate, CPOL, and CPHA bits in Control Register 1
+  hspi2.Instance->CR1 &= ~(SPI_CR1_BR | SPI_CR1_CPOL | SPI_CR1_CPHA);
+
+  // 3. Apply new settings
+  hspi2.Instance->CR1 |= (prescaler | polarity | phase);
+
+  // 4. Re-enable SPI2
+  __HAL_SPI_ENABLE(&hspi2);
+}
+/* USER CODE END 1 */ /* USER CODE END 1 */
