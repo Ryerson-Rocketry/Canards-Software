@@ -4,6 +4,9 @@
 #include "cmsis_os.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include <stdio.h>
+#include "math_utils.h"
+#include "Configs/flight_configs.h"
 
 extern SemaphoreHandle_t gSpi2Mutex;
 
@@ -198,4 +201,41 @@ void ms5611Run(uint16_t prom[8], float *p_out, float *t_out)
         step = 0;
         break;
     }
+}
+static float groundAltitude = 0.0f;
+
+void calibrateGroundAltitude(uint16_t *prom)
+{
+    float altSum = 0.0f;
+    int samples = 20;
+
+    printf("[BARO] Calibrating ground altitude...\r\n");
+
+    for (int i = 0; i < samples; i++)
+    {
+        float pressure = 0.0f;
+        float temperature = 0.0f;
+
+        // Must call 3 times to complete one full state machine cycle
+        ms5611Run(prom, &pressure, &temperature); // step 0 → sends D1 cmd
+        osDelay(pdMS_TO_TICKS(10));
+        ms5611Run(prom, &pressure, &temperature); // step 1 → reads D1, sends D2 cmd
+        osDelay(pdMS_TO_TICKS(10));
+        ms5611Run(prom, &pressure, &temperature); // step 2 → reads D2, outputs P & T
+
+        if (pressure > 0.0f) // sanity check
+        {
+            altSum += pressureToAltitude(pressure, SEA_LEVEL_PA);
+        }
+
+        osDelay(pdMS_TO_TICKS(20));
+    }
+
+    groundAltitude = altSum / samples;
+    printf("[BARO] Ground altitude: %.2f m\r\n", groundAltitude);
+}
+
+float getGroundAltitude(void)
+{
+    return groundAltitude;
 }

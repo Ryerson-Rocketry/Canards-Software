@@ -2,14 +2,41 @@
 #include "Utils/servo.h"
 #include "main.h"
 #include "cmsis_os2.h"
+#include "Configs/flight_configs.h"
+#include "math.h"
 
-void moveServo(float angle)
+/* Forward declaration — fixes implicit declaration error */
+uint16_t servoAngleToPWM(float angle);
+
+float getSlope(float velocity)
 {
-    // lookup table/equation to convert angle to pwm value
-    float pwmVal = angle;
-    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, pwmVal);
-    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwmVal);
-    osDelay(100);
-    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 1000);
-    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 1000);
+    return 82963.0f * powf(velocity, -1.62f);
+}
+
+uint16_t calcForceToPWM(float torque, float velocity)
+{
+    float force = torque / MOMENT_ARM;
+    float slope = getSlope(velocity);
+    float angle = slope * force;
+    return servoAngleToPWM(angle);
+}
+
+uint16_t servoAngleToPWM(float angle)
+{
+    float pulse = SERVO_CENTER_US + angle * SERVO_US_PER_DEG;
+
+    if (pulse < SERVO_MIN_US)
+        pulse = SERVO_MIN_US;
+    if (pulse > SERVO_MAX_US)
+        pulse = SERVO_MAX_US;
+
+    return (uint16_t)pulse;
+}
+
+/* Commands the servo to the angle required for the given torque + velocity */
+void moveServo(float torque, float velocity)
+{
+    uint16_t pwm = calcForceToPWM(torque, velocity);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, pwm);
 }

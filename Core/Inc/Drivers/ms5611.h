@@ -17,3 +17,5 @@
 void ms5611Run(uint16_t prom[8], float *p_out, float *t_out);
 HAL_StatusTypeDef ms5611Reset(void);
 HAL_StatusTypeDef ms5611ReadPROM(uint16_t out[8]);
+void calibrateGroundAltitude(uint16_t *prom);
+float getGroundAltitude(void);

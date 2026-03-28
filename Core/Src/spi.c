@@ -208,6 +208,15 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef *spiHandle)
 
 /* USER CODE BEGIN 1 */
 /* USER CODE BEGIN 1 */
+
+void SPI1_Switch_Settings(uint32_t prescaler, uint32_t cpol, uint32_t cpha)
+{
+  hspi1.Init.BaudRatePrescaler = prescaler;
+  hspi1.Init.CLKPolarity = cpol;
+  hspi1.Init.CLKPhase = cpha;
+  HAL_SPI_Init(&hspi1);
+}
+
 /**
  * @brief Switches SPI2 configuration on the fly for different peripherals.
  * @param prescaler: SPI_BAUDRATEPRESCALER_X

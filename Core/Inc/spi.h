@@ -21,6 +21,7 @@
 #ifndef __SPI_H__
 #define __SPI_H__
 
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -31,6 +32,7 @@ extern "C"
 
   /* USER CODE BEGIN Includes */
   void SPI2_Switch_Settings(uint32_t prescaler, uint32_t polarity, uint32_t phase);
+  void SPI1_Switch_Settings(uint32_t prescaler, uint32_t cpol, uint32_t cpha);
   /* USER CODE END Includes */
 
   extern SPI_HandleTypeDef hspi1;

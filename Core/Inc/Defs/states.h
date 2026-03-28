@@ -69,8 +69,14 @@ typedef struct __attribute__((packed))
     float mag[3];
     float position, velocity, pressure, tiltAngle;
     float rpy[3];
-    GPS gps;
     uint32_t timestamp;
+    // GPS fields (no doubles in packed struct — store as scaled integers)
+    int32_t latitude;  // decimal degrees × 1,000,000
+    int32_t longitude; // decimal degrees × 1,000,000
+    int32_t altitude;  // meters × 100
+    int32_t speed;     // m/s × 100
+    uint8_t fix;
+    uint8_t satelliteCount;
 } SDCardDataFormat_t;
 
 typedef struct

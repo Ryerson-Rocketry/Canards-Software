@@ -4,4 +4,5 @@
 #include "Defs/states.h"
 
 HAL_StatusTypeDef GPSInit();
-HAL_StatusTypeDef GPSRead(uint8_t buffer[GPS_BUF_SIZE], uint8_t dummyTx[GPS_BUF_SIZE], GPS *nmeaState);
+HAL_StatusTypeDef GPSRead(uint8_t buffer[128], uint8_t dummyTx[128], GPS *nmeaState);
+void GPSWaitForBoot(void);
