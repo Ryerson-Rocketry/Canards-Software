@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.22)
-
 #
 # This file is generated only once,
 # and is not re-generated if converter is called multiple times.
@@ -11,7 +10,6 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
-
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -30,6 +28,23 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
+
+# FPU Configuration for STM32F446RE (Cortex-M4F)
+# Must come AFTER project() declaration
+add_compile_options(
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+)
+
+# Add the same flags to linker
+add_link_options(
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+)
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
@@ -67,6 +82,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+    ARM_MATH_CM4
     # Add user defined symbols
 )
 
@@ -76,6 +92,6 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
-
+    -u _printf_float
     # Add user defined libraries
 )

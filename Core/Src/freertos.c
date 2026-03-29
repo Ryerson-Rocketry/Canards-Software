@@ -1,6 +1,5 @@
 #include "FreeRTOS.h"
 #include "Drivers/mmc5983ma.h"
-#include "Drivers/ms5611.h"
 #include "Drivers/lsm6dso32_app.h"
 #include "StateEstimation/altitude_estimation.h"
 #include "Utils/math_utils.h"
@@ -27,6 +26,7 @@
 #include "Drivers/ubloxm9n.h"
 #include "Utils/nmea_parse.h"
 #include "i2c.h"
+#include "Drivers/ms5611.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -56,7 +56,6 @@ volatile bool readSensorTask = false;
 volatile bool altEstTask = false;
 volatile bool launchDetTask = false;
 volatile bool dataStoreTask = false;
-volatile bool gpsRetrieveTask = false;
 volatile bool radioTask = false;
 volatile bool controlTask = false;
 
@@ -68,8 +67,6 @@ const osThreadAttr_t launchDetTask_attributes = {
     .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
     .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
-const osThreadAttr_t gpsRetrieveTask_attributes = {
-    .name = "retrieveGpsCoords", .stack_size = 512 * 2, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
     .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
@@ -81,7 +78,6 @@ void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
 void vLaunchDetTask(void *argument);
 void vDataStoreTask(void *argument);
-void vGpsRetrieveTask(void *argument);
 void vControlTask(void *argument);
 void vRadioTask(void *argument);
 void vHeartbeatTask(void *argument);
@@ -107,7 +103,6 @@ void MX_FREERTOS_Init(void)
   altEstTaskHandle = osThreadNew(vAltEstTask, NULL, &altEstTask_attributes);
   launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
   dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
-  gpsRetrieveTaskHandle = osThreadNew(vGpsRetrieveTask, NULL, &gpsRetrieveTask_attributes);
   controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
   radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
   heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
@@ -115,103 +110,73 @@ void MX_FREERTOS_Init(void)
 
 void vReadSensorTask(void *argument)
 {
-  uint32_t freq = HAL_RCC_GetSysClockFreq();
-  printf("CPU Freq: %lu Hz\r\n", freq);
 
-  uint16_t prom[8] = {0};
-  int counter = 0;
+  static float accel_filt[3] = {0.0f, 0.0f, 1000.0f};
+  const float alpha = 0.1f;
+  static float gyro_filt[3] = {0.0f, 0.0f, 0.0f};
+  const float alpha_gyro = 0.2f;
+  Rocket_States_t Rocket = {0};
 
-  HAL_StatusTypeDef status = HAL_ERROR;
-  HAL_StatusTypeDef magStatus = HAL_ERROR;
+  magInit();
+  LSM6DSO32_Rocket_Init(&hspi1);
+  Barometer_init();
+  osDelay(1000);
 
-  HAL_StatusTypeDef initStatus = magInit();
-  HAL_StatusTypeDef baroReset = ms5611Reset();
-
-  if (LSM6DSO32_Rocket_Init(&hspi1) != HAL_OK)
-  {
-    printf("LSM6DSO32 Init Failed!\r\n");
-  }
-
-  if (baroReset != HAL_OK)
-  {
-    printf("Barometer reset FAILED: %d\r\n", baroReset);
-  }
-
-  do
-  {
-    status = ms5611ReadPROM(prom);
-    counter++;
-    if (counter == 10)
-    {
-      break;
-    }
-    osDelay(pdMS_TO_TICKS(100));
-  } while (status != HAL_OK);
-
-  if (status == HAL_OK)
-  {
-    osDelay(pdMS_TO_TICKS(500));
-    calibrateGroundAltitude(prom);
-  }
-
-  if (status != HAL_OK)
-  {
-    printf("Barometer Failed");
-  }
-
-  if (initStatus != HAL_OK)
-  {
-    printf("magInit FAILED! Status: %d\r\n", initStatus);
-
-    // Halt the program
-    while (1)
-    {
-      // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-      osDelay(100);
-    }
-  }
-  HAL_NVIC_EnableIRQ(EXTI0_IRQn); // For LSM Accel (Pin 0)
-  HAL_NVIC_EnableIRQ(EXTI2_IRQn); // For LSM Gyro (Pin 2)
-  HAL_NVIC_EnableIRQ(EXTI3_IRQn); // For Mag (Pin 3)
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 
   for (;;)
   {
-    magStatus = magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
+    // I2C1: Magnetometer
+    magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
 
-    SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_4, SPI_POLARITY_HIGH, SPI_PHASE_2EDGE);
-    ms5611Run(prom, &Rocket.rawData.pressure, &Rocket.rawData.temperature);
-
-    if (magStatus == HAL_OK)
+    // SPI2: Barometer
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
     {
-      float x_cal = Rocket.rawData.mag[0] - MAG_X_OFFSET;
-      float y_cal = Rocket.rawData.mag[1] - MAG_Y_OFFSET;
+      int32_t p_mbar_x100 = Barometer_getPressure(true);
+      int32_t t_centiC = Barometer_getTemp(false);
 
-      float heading_rad = atan2f(y_cal, x_cal);
-      float heading_deg = heading_rad * (180.0f / PI);
+      /* Convert units */
+      Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
+      Rocket.rawData.temperature = t_centiC / 100.0f;
+      Rocket.estimate.position = 44330.0f * (1.0f - powf(Rocket.rawData.pressure / SEA_LEVEL_PA, 0.1903f));
+      xSemaphoreGive(gSpi2Mutex);
+    }
 
-      // Normalize to 0-360
-      if (heading_deg < 0)
+    // SPI1: IMU
+    if (xSemaphoreTake(gSpi1Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
+    {
+      if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
       {
-        heading_deg += 360.0f;
+        LSM6DSO32_Read_Accel(Rocket.rawData.accel);
+        printf("A[mg]: %.1f, %.1f, %.1f\r\n", Rocket.rawData.accel[0], Rocket.rawData.accel[1], Rocket.rawData.accel[2]);
+        for (int i = 0; i < 3; i++)
+        {
+          accel_filt[i] = (alpha * Rocket.rawData.accel[i]) + ((1.0f - alpha) * accel_filt[i]);
+          Rocket.rawData.accel[i] = accel_filt[i];
+        }
       }
 
-      printf("Heading: %.2f | X: %.3f, Y: %.3f\r\n",
-             heading_deg, x_cal, y_cal);
-    }
+      if (xSemaphoreTake(xImuGyroReadySemaphore, 0) == pdTRUE)
+      {
+        LSM6DSO32_Read_Gyro(Rocket.rawData.gyro);
+        for (int i = 0; i < 3; i++)
+        {
+          // Formula: Smooth Value = (New * Alpha) + (Old * (1 - Alpha))
+          gyro_filt[i] = (alpha_gyro * Rocket.rawData.gyro[i]) + ((1.0f - alpha_gyro) * gyro_filt[i]);
 
-    if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
-    {
-      LSM6DSO32_Read_Accel(Rocket.rawData.accel);
-      // Now accel_data[0,1,2] contains values in mg
-      printf("A[mg]: %.1f, %.1f, %.1f\r\n", Rocket.rawData.accel[0], Rocket.rawData.accel[1], Rocket.rawData.accel[2]);
-    }
-
-    // Run Gyro processing when INT2 (Pin 2) triggers
-    if (xSemaphoreTake(xImuGyroReadySemaphore, 0) == pdTRUE)
-    {
-      LSM6DSO32_Read_Gyro(Rocket.rawData.gyro);
-      // Now gyro_data[0,1,2] contains values in dps
-      printf("G[dps]: %.1f, %.1f, %.1f\r\n", Rocket.rawData.gyro[0], Rocket.rawData.gyro[1], Rocket.rawData.gyro[2]);
+          if (fabsf(gyro_filt[i]) < 0.05f)
+          {
+            Rocket.rawData.gyro[i] = 0.0f;
+          }
+          else
+          {
+            Rocket.rawData.gyro[i] = gyro_filt[i];
+          }
+        }
+      }
+      xSemaphoreGive(gSpi1Mutex);
     }
 
     Rocket.rawData.timestamp = osKernelGetTickCount();
@@ -226,55 +191,75 @@ void vReadSensorTask(void *argument)
 
 void vAltEstTask(void *argument)
 {
-  float dt = 0.0f;
   float processNoise[2][2] = {{0.01f, 0.0f}, {0.0f, 0.01f}};
-  float systemCov[2][2] = {{10.0f, 0.0f}, {0.0f, 10.0f}};
-  float stateTransition[2][2] = {
-      {1.0f, dt},
-      {0.0f, 1.0f}};
-  float baroAltVar = 0.5f;
-  uint32_t last_tick = osKernelGetTickCount();
+  static float systemCov[2][2] = {{10.0f, 0.0f}, {0.0f, 10.0f}};
+  float stateTransition[2][2] = {{1.0f, 0.0f}, {0.0f, 1.0f}};
+  const float baroAltVar = 0.5f;
+
+  static uint32_t last_tick = 0;
+  float dt = 0.0f;
+
   float accel_in_m_s2;
-  uint32_t notification;
+  float baro_altitude;
+
+  Rocket.estimate.tilt_angle = 90.0f;
 
   for (;;)
   {
-    notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
+    if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY) == 0)
     {
       altEstTask = true;
       continue;
     }
 
-    if (Rocket.flightState == STATE_PAD)
-    {
-      Rocket.estimate.position = 0.0f;
-      Rocket.estimate.velocity = 0.0f;
-    }
-
     uint32_t current_tick = osKernelGetTickCount();
-    Rocket.estimate.launch_tick = current_tick;
+
     dt = (float)(current_tick - last_tick) / 1000.0f;
     last_tick = current_tick;
 
-    // safety for first run
-    if (dt <= 0.0f)
-    {
+    if (dt < 0.001f)
       dt = 0.01f;
+    if (dt > 0.1f)
+      dt = 0.1f;
+
+    stateTransition[0][1] = dt;
+
+    if (Rocket.flightState == STATE_PAD)
+    {
+      static bool groundCaptured = false;
+      if (!groundCaptured)
+      {
+        setGroundPressure(Rocket.rawData.pressure);
+        groundCaptured = true;
+      }
+      Rocket.estimate.position = 0.0f;
+      Rocket.estimate.velocity = 0.0f;
+      systemCov[0][0] = 10.0f;
+      systemCov[0][1] = 0.0f;
+      systemCov[1][0] = 0.0f;
+      systemCov[1][1] = 10.0f;
     }
 
-    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f;
-    altPredict(dt, &Rocket.estimate.position, &Rocket.estimate.velocity, accel_in_m_s2, processNoise, systemCov, stateTransition);
+    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle);
+    if (fabsf(accel_in_m_s2) > 500.0f)
+      accel_in_m_s2 = 0.0f;
+
+    altPredict(dt, &Rocket.estimate.position, &Rocket.estimate.velocity,
+               accel_in_m_s2, processNoise, systemCov, stateTransition);
+
+    baro_altitude = getRelativeAltitude(Rocket.rawData.pressure);
     altUpdate(&Rocket.estimate.position, &Rocket.estimate.velocity,
-              pressureToAltitude(Rocket.rawData.pressure, SEA_LEVEL_PA) - getGroundAltitude(),
-              systemCov, baroAltVar);
-    Rocket.estimate.timestamp = osKernelGetTickCount();
+              baro_altitude, systemCov, baroAltVar);
+
+    // update rocket state estimate and gyro integration
+    Rocket.estimate.timestamp = current_tick;
     Rocket.estimate.acceleration = accel_in_m_s2;
     Rocket.estimate.rpy[0] += Rocket.rawData.gyro[2] * dt;
     Rocket.estimate.rpy[1] += Rocket.rawData.gyro[0] * dt;
     Rocket.estimate.rpy[2] += Rocket.rawData.gyro[1] * dt;
-    Rocket.estimate.tilt_angle = sqrtf(powf(Rocket.estimate.rpy[1], 2) + powf(Rocket.estimate.rpy[2], 2));
+    Rocket.estimate.tilt_angle = sqrtf(
+        Rocket.estimate.rpy[1] * Rocket.estimate.rpy[1] +
+        Rocket.estimate.rpy[2] * Rocket.estimate.rpy[2]);
 
     xTaskNotifyGive(controlTaskHandle);
     xTaskNotifyGive((TaskHandle_t)dataStoreTaskHandle);
@@ -284,17 +269,15 @@ void vAltEstTask(void *argument)
 
 void vLaunchDetTask(void *argument)
 {
-
   float accel_z;
   static uint32_t accel_start_time = 0;
-  bool threshold_active = false;
+  static bool threshold_active = false;
   static uint32_t burnoutStartTime = 0;
   static bool launch_recorded = false;
   static uint32_t canardActivationTime = 0;
 
   for (;;)
   {
-
     uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     if (notification == 0)
@@ -315,7 +298,6 @@ void vLaunchDetTask(void *argument)
     switch (Rocket.flightState)
     {
     case STATE_PAD:
-      // rpy
       Rocket.estimate.rpy[0] = 0.0f;
       Rocket.estimate.rpy[1] = 0.0f;
       Rocket.estimate.rpy[2] = 0.0f;
@@ -357,6 +339,7 @@ void vLaunchDetTask(void *argument)
         canardActivationTime = now;
       }
       break;
+
     case STATE_CANARDS_ACTIVATE:
       HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
       if (Rocket.estimate.velocity <= 50.0f && (now - canardActivationTime) >= pdMS_TO_TICKS(15000))
@@ -383,43 +366,31 @@ void vDataStoreTask(void *argument)
   uint32_t syncCounter = 0;
   char csvBuffer[256];
 
-  /* ── Mount ── */
   if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
   {
-    printf("[SD] Mount failed\n");
     sdInitialized = false;
-    vTaskDelete(NULL); /* no point running if SD is dead */
+    vTaskDelete(NULL);
     return;
   }
 
-  /* ── Open file ── */
   if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE) != FR_OK)
   {
-    printf("[SD] Failed to open %s\n", FLIGHT_DATA_FILE_NAME);
     sdInitialized = false;
     vTaskDelete(NULL);
     return;
   }
 
   sdInitialized = true;
-  printf("[SD] Ready — %lu MB\n",
-         (hsd.SdCard.BlockSize * hsd.SdCard.BlockNbr) / 1024 / 1024);
-
-  /* ── Write CSV header only if file is new (size == 0) ── */
   if (f_size(&SDFile) == 0)
   {
-    f_puts("Timestamp_ms,Accel_X,Accel_Y,Accel_Z,"
-           "Position,Velocity\r\n",
-           &SDFile);
+    char *fileHeaders = "timestamp (ms), accel_x (mg), accel_y (mg), accel_z (mg), gyro_x (dps), gyro_y (dps), gyro_z (dps), mag_x, mag_y, mag_z, roll, pitch, yaw,tilt_angle, altitude, velocity \r\n";
+    f_puts(fileHeaders, &SDFile);
   }
 
-  /* ── Main loop ── */
   for (;;)
   {
-    /* Block until another task calls xTaskNotifyGive() */
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    /* ── Snapshot (keep critical section as short as possible) ── */
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
     memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
@@ -427,100 +398,57 @@ void vDataStoreTask(void *argument)
     memcpy(Rocket.snapshot.rpy, Rocket.estimate.rpy, sizeof(Rocket.snapshot.rpy));
     taskEXIT_CRITICAL();
 
-    /* These are atomic reads — safe outside critical section */
     Rocket.snapshot.pressure = Rocket.rawData.pressure;
     Rocket.snapshot.position = Rocket.estimate.position;
     Rocket.snapshot.velocity = Rocket.estimate.velocity;
     Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
-    Rocket.snapshot.latitude = (int32_t)(Rocket.gpsState.latitude * 1000000.0);
-    Rocket.snapshot.longitude = (int32_t)(Rocket.gpsState.longitude * 1000000.0);
-    Rocket.snapshot.altitude = (int32_t)(Rocket.gpsState.altitude * 100.0f);
-    Rocket.snapshot.speed = (int32_t)(Rocket.gpsState.speed * 100.0f);
-    Rocket.snapshot.fix = (uint8_t)Rocket.gpsState.fix;
-    Rocket.snapshot.satelliteCount = (uint8_t)Rocket.gpsState.satelliteCount;
     Rocket.snapshot.timestamp = osKernelGetTickCount();
 
-    /* ── Format CSV row ── */
     int len = snprintf(csvBuffer, sizeof(csvBuffer),
-                       "%lu,%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%d,%d\r\n",
+                       "%lu,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\r\n",
                        Rocket.snapshot.timestamp,
-                       (int)(Rocket.snapshot.accel[0] * 100),
-                       (int)(Rocket.snapshot.accel[1] * 100),
-                       (int)(Rocket.snapshot.accel[2] * 100),
-                       (int)(Rocket.snapshot.position * 10000),
-                       (int)(Rocket.snapshot.velocity * 10000),
-                       Rocket.snapshot.latitude,
-                       Rocket.snapshot.longitude,
-                       Rocket.snapshot.altitude,
-                       Rocket.snapshot.speed,
-                       Rocket.snapshot.fix,
-                       Rocket.snapshot.satelliteCount);
+                       (int32_t)(Rocket.snapshot.accel[0] * 100),
+                       (int32_t)(Rocket.snapshot.accel[1] * 100),
+                       (int32_t)(Rocket.snapshot.accel[2] * 100),
+                       (int32_t)(Rocket.snapshot.gyro[0] * 100),
+                       (int32_t)(Rocket.snapshot.gyro[1] * 100),
+                       (int32_t)(Rocket.snapshot.gyro[2] * 100),
+                       (int32_t)(Rocket.snapshot.mag[0] * 100),
+                       (int32_t)(Rocket.snapshot.mag[1] * 100),
+                       (int32_t)(Rocket.snapshot.mag[2] * 100),
+                       (int32_t)(Rocket.snapshot.rpy[0] * 100),
+                       (int32_t)(Rocket.snapshot.rpy[1] * 100),
+                       (int32_t)(Rocket.snapshot.rpy[2] * 100),
+                       (int32_t)(Rocket.snapshot.tiltAngle * 100),
+                       (int32_t)(Rocket.snapshot.position * 100),
+                       (int32_t)(Rocket.snapshot.velocity * 100));
 
     if (len <= 0 || len >= (int)sizeof(csvBuffer))
     {
-      printf("[SD] snprintf overflow — row dropped\n");
       dataStoreTask = true;
       continue;
     }
 
-    /* ── Write ── */
     if (f_write(&SDFile, csvBuffer, (UINT)len, &bytesWritten) != FR_OK || bytesWritten != (UINT)len)
     {
-      printf("[SD] Write error\n");
       dataStoreTask = true;
       continue;
     }
 
-    /* ── Periodic flush (every 50 rows) ── */
-    if (++syncCounter >= 1)
+    if (++syncCounter >= 50)
     {
       f_sync(&SDFile);
       syncCounter = 0;
-      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7); /* heartbeat LED */
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     }
 
     dataStoreTask = true;
   }
 }
 
-void vGpsRetrieveTask(void *argument)
-{
-  uint8_t buffer[GPS_BUF_SIZE];
-  uint8_t dummyTx[GPS_BUF_SIZE];
-  memset(dummyTx, 0xFF, GPS_BUF_SIZE);
-
-  /* Give the M9N time to boot before first read */
-  osDelay(pdMS_TO_TICKS(1000));
-  GPSWaitForBoot();
-
-  for (;;)
-  {
-    HAL_StatusTypeDef status = GPSRead(buffer, dummyTx, &Rocket.gpsState);
-
-    if (status == HAL_OK)
-    {
-      printf("[GPS] fix=%d sats=%d lat=%.6f%c lon=%.6f%c alt=%.1fm spd=%.2fm/s\r\n",
-             Rocket.gpsState.fix,
-             Rocket.gpsState.satelliteCount,
-             Rocket.gpsState.latitude, Rocket.gpsState.latSide,
-             Rocket.gpsState.longitude, Rocket.gpsState.lonSide,
-             Rocket.gpsState.altitude,
-             Rocket.gpsState.speed);
-    }
-    else
-    {
-      printf("[GPS] Read failed\r\n");
-    }
-
-    gpsRetrieveTask = true;
-    osDelay(pdMS_TO_TICKS(1000)); /* M9N outputs at 1Hz by default */
-  }
-}
-
 void vControlTask(void *argument)
 {
   float setPoint = 0.0f;
-
   float rollError = 0;
   static float integral = 0;
   float derivative, output = 0;
@@ -535,9 +463,8 @@ void vControlTask(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
-    if (Rocket.flightState != STATE_CANARDS_ACTIVATE)
+    if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
     {
-
       if (!startTimeCaptured)
       {
         activationStartTime = osKernelGetTickCount();
@@ -557,7 +484,6 @@ void vControlTask(void *argument)
       }
 
       rollError = setPoint - Rocket.estimate.rpy[0];
-
       float pitchError = pitchSetPoint - Rocket.estimate.rpy[1];
 
       if (fabsf(pitchError) > 30)
@@ -573,18 +499,8 @@ void vControlTask(void *argument)
       }
 
       derivative = Rocket.rawData.gyro[2];
-
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
-
-      // output is toque
-      // moment arm
-      // toqrue/ moment arm = force in N to correct the rockets roll
-      // then we use equation where velocity = input that gives us slope
-      // slope => x val = force in N, y = angle
-      // then convert angle to pwm
-
-      // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-      moveServo(output, Rocket.estimate.velocity);
+      moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
     }
     else
     {
@@ -603,84 +519,53 @@ void vHeartbeatTask(void *argument)
   for (;;)
   {
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-    if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && gpsRetrieveTask)
+
+    if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && controlTask && radioTask)
     {
-      HAL_IWDG_Refresh(&hiwdg); // refresh the watchdog
-      // reset flags for the next check
+      HAL_IWDG_Refresh(&hiwdg);
       readSensorTask = false;
       altEstTask = false;
       launchDetTask = false;
       dataStoreTask = false;
-      gpsRetrieveTask = false;
       controlTask = false;
+      radioTask = false;
     }
+
     osDelay(pdMS_TO_TICKS(100));
   }
 }
 
 void vRadioTask(void *argument)
 {
-  uint8_t data[64];
-  // uint32_t packetCount = 0;
-
-  // 1. Initialize the radio
-  // status = rfm69Init();
-
-  // // 2. Handle init failure gracefully
-  // if (status != HAL_OK)
-  // {
-  //   // Log error or blink an error LED here
-  //   vTaskDelete(NULL); // Kill the task safely if hardware isn't responding
-  // }
-
-  uint8_t ESP32_ADDR = 0xFF;
-
+  
   for (;;)
   {
+    // if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    // {
+    //   int len = snprintf((char *)data, sizeof(data),
+    //                      "%lu,%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%d,%d\r\n",
+    //                      Rocket.snapshot.timestamp,
+    //                      (int)(Rocket.snapshot.accel[0] * 100),
+    //                      (int)(Rocket.snapshot.accel[1] * 100),
+    //                      (int)(Rocket.snapshot.accel[2] * 100),
+    //                      (int)(Rocket.snapshot.position * 10000),
+    //                      (int)(Rocket.snapshot.velocity * 10000),
+    //                      Rocket.snapshot.latitude,
+    //                      Rocket.snapshot.longitude,
+    //                      Rocket.snapshot.altitude,
+    //                      Rocket.snapshot.speed,
+    //                      Rocket.snapshot.fix,
+    //                      Rocket.snapshot.satelliteCount);
 
-    if (xSemaphoreTake(gI2c1Mutex, 100) == pdTRUE)
-    {
-
-      int len = snprintf((char *)data, sizeof(data),
-                         "%lu,%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%d,%d\r\n",
-                         Rocket.snapshot.timestamp,
-                         (int)(Rocket.snapshot.accel[0] * 100),
-                         (int)(Rocket.snapshot.accel[1] * 100),
-                         (int)(Rocket.snapshot.accel[2] * 100),
-                         (int)(Rocket.snapshot.position * 10000),
-                         (int)(Rocket.snapshot.velocity * 10000),
-                         Rocket.snapshot.latitude,
-                         Rocket.snapshot.longitude,
-                         Rocket.snapshot.altitude,
-                         Rocket.snapshot.speed,
-                         Rocket.snapshot.fix,
-                         Rocket.snapshot.satelliteCount);
-
-      if (len > 0 && len < sizeof(data))
-      {
-        HAL_I2C_Master_Transmit(&hi2c1, ESP32_ADDR << 1, data, len, 100);
-      }
-      xSemaphoreGive(gI2c1Mutex);
-    }
+    //   if (len > 0 && len < (int)sizeof(data))
+    //   {
+    //     HAL_I2C_Master_Transmit(&hi2c1, ESP32_ADDR << 1, data, len, 100);
+    //   }
+    //   xSemaphoreGive(gI2c1Mutex);
+    // }
 
     radioTask = true;
     osDelay(pdMS_TO_TICKS(100));
-    //   // 3. Prepare a meaningful payload
-    //   memset(data, 0, sizeof(data));
-    //   sprintf((char *)data, "Test Packet #%lu", packetCount++);
-
-    //   // 4. Transmit and check status
-    //   status = rfm69Transmit(data, 64);
-
-    //   if (status == HAL_OK)
-    //   {
-    //     // Toggle an LED so you know it's working without a debugger
-    //     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-    //   }
-
-    //   // 5. Vital: Give the radio and the OS time to breathe
-    //   // Sends one packet every 500ms
-    //   vTaskDelay(pdMS_TO_TICKS(500));
   }
 }
 
@@ -689,15 +574,15 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
   if (GPIO_Pin == GPIO_PIN_3)
-  { // Magnetometer
+  {
     xSemaphoreGiveFromISR(xMagDataReadySemaphore, &xHigherPriorityTaskWoken);
   }
   else if (GPIO_Pin == GPIO_PIN_0)
-  { // LSM Accel (INT1)
+  {
     xSemaphoreGiveFromISR(xImuAccelReadySemaphore, &xHigherPriorityTaskWoken);
   }
   else if (GPIO_Pin == GPIO_PIN_2)
-  { // LSM Gyro (INT2)
+  {
     xSemaphoreGiveFromISR(xImuGyroReadySemaphore, &xHigherPriorityTaskWoken);
   }
 

@@ -51,32 +51,37 @@ void altPredict(float dt, float *pos, float *vel, float acceleration, float proc
  */
 void altUpdate(float *pos, float *vel, float press, float systemCov[2][2], float baroAltitudeVariance)
 {
-    float measurementFunc[2] = {1, 0}; // H
-    float kalmanGain[2];               // K
-    float residual;                    // y
-    float systemUncertainty;           // S
+    float measurementFunc[2] = {1.0f, 0.0f};
+    float kalmanGain[2];
+    float residual;
+    float systemUncertainty;
     float tmp[2];
     float out[2];
     float res[2][2];
     float temp[2][2];
+    float newCov[2][2];
 
-    // K = PH^TS^-1
-    matMul2x2_2x1(systemCov, measurementFunc, tmp); // tmp = PH^T
-    matMul1x2_2x2(measurementFunc, systemCov, out); // out = HP
+    matMul2x2_2x1(systemCov, measurementFunc, tmp);
+    matMul1x2_2x2(measurementFunc, systemCov, out);
     systemUncertainty = (out[0] * measurementFunc[0] + out[1] * measurementFunc[1]) + baroAltitudeVariance;
 
-    kalmanGain[0] = tmp[0] * (1.0f / systemUncertainty);
-    kalmanGain[1] = tmp[1] * (1.0f / systemUncertainty);
+    if (systemUncertainty < 0.0001f)
+        systemUncertainty = 0.0001f;
 
-    // y = z - Hx, H = [1 0]^T, so no velocity
+    kalmanGain[0] = tmp[0] / systemUncertainty;
+    kalmanGain[1] = tmp[1] / systemUncertainty;
+
     residual = press - (*pos);
 
-    // x = x + Ky
     *pos += kalmanGain[0] * residual;
     *vel += kalmanGain[1] * residual;
 
-    // P = (I-KH)P
-    matMul2x1_1x2(kalmanGain, measurementFunc, res); // KH
-    matIdentitySub(res, temp);                       // I - KH
-    matMul2x2_2x2(temp, systemCov, systemCov);
+    matMul2x1_1x2(kalmanGain, measurementFunc, res);
+    matIdentitySub(res, temp);
+    matMul2x2_2x2(temp, systemCov, newCov);
+
+    systemCov[0][0] = newCov[0][0];
+    systemCov[0][1] = newCov[0][1];
+    systemCov[1][0] = newCov[1][0];
+    systemCov[1][1] = newCov[1][1];
 }

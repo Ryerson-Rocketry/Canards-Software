@@ -13,7 +13,7 @@
                 "interface/stlink.cfg",
                 "target/stm32f4x.cfg"
             ],
-            // "preLaunchTask": "CMake: build", // Change this to the standard CMake build task
+            "preLaunchTask": "CMake: build", // Change this to the standard CMake build task
             "runToEntryPoint": "main",
             "showDevDebugOutput": "raw",
         }

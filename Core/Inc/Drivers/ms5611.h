@@ -1,21 +1,77 @@
-#pragma once
+#ifndef MS5611_H_
+#define MS5611_H_
 
+#include <stdint.h>
+#include <stdbool.h>
 #include "main.h"
-#include "stm32f4xx_hal_def.h"
+/**
+ * @brief The oversampling rate
+ * @warn an higher value means a longer conversion
+ */
+typedef enum OSR
+{
+	OSR_256,
+	OSR_512,
+	OSR_1024,
+	OSR_2048,
+	OSR_4096
+} OSR;
 
-// subject to change
-#define BARO_CS_PORT GPIOB
-#define BARO_CS_PIN GPIO_PIN_0
+/**
+ * @brief Init the Barometer with default parameters
+ */
+extern void Barometer_init();
 
-// Register Hex Values
-#define MS5611_RESET_REG 0x1E
-#define MS5611_OSR_D1_4096_REG 0x48
-#define MS5611_OSR_D2_4096_REG 0x58
-#define MS5611_ADC_REG 0x00
-#define MS5611_BASE_PROM_REG 0xA0
+/**
+ * @brief Set the OSR (Oversampling rate)
+ * 		  Setting another value from the enumeration will put the min OSR
+ * @warn setting an higher value means taking more time to read the data
+ * @param osr the oversampling rate (refers to OSR enumeration from barometer.h)
+ */
+extern void Barometer_setOSR(OSR osr);
 
-void ms5611Run(uint16_t prom[8], float *p_out, float *t_out);
-HAL_StatusTypeDef ms5611Reset(void);
-HAL_StatusTypeDef ms5611ReadPROM(uint16_t out[8]);
-void calibrateGroundAltitude(uint16_t *prom);
-float getGroundAltitude(void);
+/**
+ * @brief Return the temperature with a 2 digits precision in celcius
+ * Example : 2000 -> 20,00°C
+ *
+ * @param calculate true if you want to update the value
+ * 		  It will update the threes values
+ * @pre call Barometer_init
+ *
+ * @return the temperature
+ */
+extern int32_t Barometer_getTemp(bool calculate);
+
+/**
+ * @brief Return the pressure in mbar with a 2 digits precision
+ * Example : 100000 -> 1000,00 mbar
+ *
+ * @param calculate true if you want to update the value
+ * 		  It will update the threes values
+ * @pre call Barometer_init
+ *
+ * @return the pressure
+ */
+extern int32_t Barometer_getPressure(bool calculate);
+
+/**
+ * @brief Return the altitude in meters
+ *
+ * @param calculate true if you want to update the value
+ * 		  It will update the threes values
+ * @pre call Barometer_init
+ *
+ * @return the altitude
+ */
+extern float Barometer_getAltitude(bool calculate);
+
+/**
+ * @brief calculate/update the altitude/pressure/temperature
+ * 		  using the barometer
+ */
+extern void Barometer_calculate();
+
+float getRelativeAltitude(float currentPressurePa);
+float getGroundPressure(void);
+void setGroundPressure(float p);
+#endif /* MS5611_H_ */
