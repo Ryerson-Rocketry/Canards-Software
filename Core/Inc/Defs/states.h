@@ -40,27 +40,6 @@ typedef struct
     uint32_t timestamp;
 } RocketState_t;
 
-typedef enum
-{
-    START_P,
-    READ_P_START_T,
-    READ_T_COMPUTE
-} BaroStep_t;
-
-typedef struct NMEA_DATA
-{
-    double latitude;      // latitude in decimal degrees
-    char latSide;         // N or S
-    double longitude;     // longitude in decimal degrees
-    char lonSide;         // E or W
-    float altitude;       // altitude in meters
-    float speed;          // Ground speed in m/s (Added for GPRMC)
-    float hdop;           // horizontal dilution of precision
-    int satelliteCount;   // number of satellites
-    int fix;              // 1 = fix, 0 = no fix
-    char lastMeasure[11]; // hhmmss.ss + null terminator
-} GPS;
-
 // 4-byte aligned for DMA
 typedef struct __attribute__((packed))
 {
@@ -69,22 +48,27 @@ typedef struct __attribute__((packed))
     float mag[3];
     float position, velocity, pressure, tiltAngle;
     float rpy[3];
+
+    float rollError;
+    float pwmAngle;
+    float pitchError;
+    FlightState_t flightState;
     uint32_t timestamp;
-    // GPS fields (no doubles in packed struct — store as scaled integers)
-    int32_t latitude;  // decimal degrees × 1,000,000
-    int32_t longitude; // decimal degrees × 1,000,000
-    int32_t altitude;  // meters × 100
-    int32_t speed;     // m/s × 100
-    uint8_t fix;
-    uint8_t satelliteCount;
 } SDCardDataFormat_t;
+
+typedef struct
+{
+    float rollError;
+    float pitchError;
+    float pwmAngle;
+    float setPoint;
+} ControlData_t;
 
 typedef struct
 {
     FlightState_t flightState;
     RawSensorData_t rawData;
     RocketState_t estimate;
+    ControlData_t control;
     SDCardDataFormat_t snapshot;
-    GPS gpsState;
-
 } Rocket_States_t;

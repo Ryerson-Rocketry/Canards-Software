@@ -112,7 +112,7 @@ void vReadSensorTask(void *argument)
 {
 
   static float accel_filt[3] = {0.0f, 0.0f, 1000.0f};
-  const float alpha = 0.1f;
+  const float alpha_accel = 0.1f;
   static float gyro_filt[3] = {0.0f, 0.0f, 0.0f};
   const float alpha_gyro = 0.2f;
   Rocket_States_t Rocket = {0};
@@ -150,10 +150,9 @@ void vReadSensorTask(void *argument)
       if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
       {
         LSM6DSO32_Read_Accel(Rocket.rawData.accel);
-        printf("A[mg]: %.1f, %.1f, %.1f\r\n", Rocket.rawData.accel[0], Rocket.rawData.accel[1], Rocket.rawData.accel[2]);
         for (int i = 0; i < 3; i++)
         {
-          accel_filt[i] = (alpha * Rocket.rawData.accel[i]) + ((1.0f - alpha) * accel_filt[i]);
+          accel_filt[i] = (alpha_accel * Rocket.rawData.accel[i]) + ((1.0f - alpha_accel) * accel_filt[i]);
           Rocket.rawData.accel[i] = accel_filt[i];
         }
       }
@@ -191,10 +190,30 @@ void vReadSensorTask(void *argument)
 
 void vAltEstTask(void *argument)
 {
-  float processNoise[2][2] = {{0.01f, 0.0f}, {0.0f, 0.01f}};
-  static float systemCov[2][2] = {{10.0f, 0.0f}, {0.0f, 10.0f}};
-  float stateTransition[2][2] = {{1.0f, 0.0f}, {0.0f, 1.0f}};
-  const float baroAltVar = 0.5f;
+  // Process noise - accounts for accelerometer noise AND unmodeled dynamics
+  // These values work well for rocket flights where there are aerodynamic effects
+  // the simple kinematic model doesn't capture
+  float processNoise[2][2] = {
+      {0.01f, 0.0f}, // Position process noise (m²)
+      {0.0f, 0.1f}   // Velocity process noise (m²/s²) - increased because velocity compounds errors faster
+  };
+
+  // Initial uncertainty - start with high uncertainty, filter will converge quickly
+  static float systemCov[2][2] = {
+      {10.0f, 0.0f}, // Initial altitude uncertainty (m²) - about ±3m standard deviation
+      {0.0f, 25.0f}  // Initial velocity uncertainty (m²/s²) - about ±5 m/s standard deviation
+  };
+
+  // State transition matrix - pure kinematics, will be updated each cycle
+  float stateTransition[2][2] = {
+      {1.0f, 0.0f}, // Altitude carries forward
+      {0.0f, 1.0f}  // Velocity carries forward
+  };
+  // Note: stateTransition[0][1] gets set to dt each iteration in your code
+
+  // Barometer measurement noise - MS5611 in flight conditions
+  // Using 1.0 accounts for vibration and dynamic pressure effects during flight
+  const float baroAltVar = 1.0f; // Variance in m² (standard deviation ≈ 1.0m)
 
   static uint32_t last_tick = 0;
   float dt = 0.0f;
@@ -383,7 +402,15 @@ void vDataStoreTask(void *argument)
   sdInitialized = true;
   if (f_size(&SDFile) == 0)
   {
-    char *fileHeaders = "timestamp (ms), accel_x (mg), accel_y (mg), accel_z (mg), gyro_x (dps), gyro_y (dps), gyro_z (dps), mag_x, mag_y, mag_z, roll, pitch, yaw,tilt_angle, altitude, velocity \r\n";
+    char *fileHeaders =
+        "timestamp (ms), flight_state (enum), "
+        "accel_x (centi-mg), accel_y (centi-mg), accel_z (centi-mg), "
+        "gyro_x (centi-dps), gyro_y (centi-dps), gyro_z (centi-dps), "
+        "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
+        "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
+        "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
+        "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg)"
+        "\r\n";
     f_puts(fileHeaders, &SDFile);
   }
 
@@ -402,26 +429,40 @@ void vDataStoreTask(void *argument)
     Rocket.snapshot.position = Rocket.estimate.position;
     Rocket.snapshot.velocity = Rocket.estimate.velocity;
     Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
+    Rocket.snapshot.rollError = Rocket.control.rollError;
+    Rocket.snapshot.pwmAngle = Rocket.control.pwmAngle;
+    Rocket.snapshot.pitchError = Rocket.control.pitchError;
+    Rocket.snapshot.flightState = Rocket.flightState;
     Rocket.snapshot.timestamp = osKernelGetTickCount();
 
-    int len = snprintf(csvBuffer, sizeof(csvBuffer),
-                       "%lu,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\r\n",
-                       Rocket.snapshot.timestamp,
-                       (int32_t)(Rocket.snapshot.accel[0] * 100),
-                       (int32_t)(Rocket.snapshot.accel[1] * 100),
-                       (int32_t)(Rocket.snapshot.accel[2] * 100),
-                       (int32_t)(Rocket.snapshot.gyro[0] * 100),
-                       (int32_t)(Rocket.snapshot.gyro[1] * 100),
-                       (int32_t)(Rocket.snapshot.gyro[2] * 100),
-                       (int32_t)(Rocket.snapshot.mag[0] * 100),
-                       (int32_t)(Rocket.snapshot.mag[1] * 100),
-                       (int32_t)(Rocket.snapshot.mag[2] * 100),
-                       (int32_t)(Rocket.snapshot.rpy[0] * 100),
-                       (int32_t)(Rocket.snapshot.rpy[1] * 100),
-                       (int32_t)(Rocket.snapshot.rpy[2] * 100),
-                       (int32_t)(Rocket.snapshot.tiltAngle * 100),
-                       (int32_t)(Rocket.snapshot.position * 100),
-                       (int32_t)(Rocket.snapshot.velocity * 100));
+    // Now format the snapshot into CSV
+    int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
+    len += snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.flightState);
+
+#define APPEND_SCALED(value) \
+  len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)((value) * 100))
+    APPEND_SCALED(Rocket.snapshot.accel[0]);
+    APPEND_SCALED(Rocket.snapshot.accel[1]);
+    APPEND_SCALED(Rocket.snapshot.accel[2]);
+    APPEND_SCALED(Rocket.snapshot.gyro[0]);
+    APPEND_SCALED(Rocket.snapshot.gyro[1]);
+    APPEND_SCALED(Rocket.snapshot.gyro[2]);
+    APPEND_SCALED(Rocket.snapshot.mag[0]);
+    APPEND_SCALED(Rocket.snapshot.mag[1]);
+    APPEND_SCALED(Rocket.snapshot.mag[2]);
+    APPEND_SCALED(Rocket.snapshot.rpy[0]);
+    APPEND_SCALED(Rocket.snapshot.rpy[1]);
+    APPEND_SCALED(Rocket.snapshot.rpy[2]);
+    APPEND_SCALED(Rocket.snapshot.tiltAngle);
+    APPEND_SCALED(Rocket.snapshot.position);
+    APPEND_SCALED(Rocket.snapshot.velocity);
+    APPEND_SCALED(Rocket.snapshot.rollError);
+    APPEND_SCALED(Rocket.snapshot.pitchError);
+    APPEND_SCALED(Rocket.snapshot.pwmAngle);
+
+    len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
+
+#undef APPEND_SCALED
 
     if (len <= 0 || len >= (int)sizeof(csvBuffer))
     {
@@ -484,9 +525,11 @@ void vControlTask(void *argument)
       }
 
       rollError = setPoint - Rocket.estimate.rpy[0];
-      float pitchError = pitchSetPoint - Rocket.estimate.rpy[1];
+      Rocket.control.rollError = rollError;
+      Rocket.control.setPoint = setPoint;
+      Rocket.control.pitchError = pitchSetPoint - Rocket.estimate.rpy[1];
 
-      if (fabsf(pitchError) > 30)
+      if (fabsf(Rocket.control.pitchError) > 30)
       {
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
         controlTask = true;
@@ -500,7 +543,7 @@ void vControlTask(void *argument)
 
       derivative = Rocket.rawData.gyro[2];
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
-      moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
+      Rocket.control.pwmAngle = moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
     }
     else
     {
@@ -537,7 +580,7 @@ void vHeartbeatTask(void *argument)
 
 void vRadioTask(void *argument)
 {
-  
+
   for (;;)
   {
     // if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)

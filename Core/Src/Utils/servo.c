@@ -26,6 +26,17 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     float force = torque / MOMENT_ARM;
     float slope = getSlope(velocity);
     float angle = slope * force * getAltitudeScaling(pressure);
+
+    if (angle > 20.0f)
+    {
+        angle = 20.0f;
+    }
+
+    if (angle < -20.0f)
+    {
+        angle = -20.0f;
+    }
+
     return servoAngleToPWM(angle);
 }
 
@@ -42,9 +53,10 @@ uint16_t servoAngleToPWM(float angle)
 }
 
 /* Commands the servo to the angle required for the given torque + velocity */
-void moveServo(float torque, float velocity, float pressure)
+uint16_t moveServo(float torque, float velocity, float pressure)
 {
     uint16_t pwm = calcForceToPWM(torque, velocity, pressure);
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm);
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, pwm);
+    return pwm;
 }

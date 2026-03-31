@@ -16,6 +16,23 @@
             "preLaunchTask": "CMake: build", // Change this to the standard CMake build task
             "runToEntryPoint": "main",
             "showDevDebugOutput": "raw",
-        }
+        },
+        {
+            "name": "Release (OpenOCD)",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Release/ControlSystems_Canards.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "servertype": "openocd",
+            "device": "STM32F446RE",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32f4x.cfg"
+            ],
+            "svdFile": "${workspaceFolder}/.vscode/STM32F446.svd",
+            "preLaunchTask": "STM32: Build Release",
+            "showDevDebugOutput": "none"
+        },
     ]
 }
