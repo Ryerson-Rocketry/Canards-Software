@@ -599,15 +599,6 @@ void vRadioTask(void *argument)
   // 3. Send the variable "len" to ESP32 using I2C
   // 4. retrieve data using esp32, then transmit it via radio
 
-  test
-
-  if (address != 0x00)
-  {
-    foudnAddress = address;
-  }
-
-  printf(foundAddress);
-
   for (;;)
   {
 
