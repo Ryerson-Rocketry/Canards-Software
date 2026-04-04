@@ -62,7 +62,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 # Find the Eigen package
 set(Eigen3_DIR "C:/msys64/mingw64/share/eigen3/cmake")
-find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+find_package(Eigen3 3.4 REQUIRED)
 
 
 # Add sources to executable
@@ -76,7 +76,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Utils/servo.c
     Core/Src/Drivers/rfm69.c
     Core/Src/StateEstimation/attitude_estimation.cpp
-    Core/Src/StateEstimation/math_utils.cpp
 )
 
 # Add include paths

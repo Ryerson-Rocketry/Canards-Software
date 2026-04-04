@@ -1,4 +1,5 @@
 #include <iostream>
+#define EIGEN_DEFAULT_SCALAR float  // or use explicit float types throughout
 #include <Eigen/Dense>
 #include "StateEstimation/attitude_estimation.h"
 #include "math.h"
@@ -7,7 +8,7 @@
 AttitudeEstimation::AttitudeEstimation(/* args */)
 {
     dt = 0.01f;
-    I4 = Eigen::MatrixXd::Identity(4,4);
+    I4 = Eigen::Matrix4f::Identity();
 }
 
 AttitudeEstimation::~AttitudeEstimation()
@@ -28,7 +29,7 @@ Eigen::Vector4f AttitudeEstimation::discretization() {
           wy,  -wz,   0,   wx,
           wz,   wy, -wx,   0;
 
-    attitude *= (cosf(totalAngularSpeed * dt /2) * I4 + (2/totalAngularSpeed) * sinf(totalAngularSpeed * dt /2) * Omega);
+    attitude = ((cosf(totalAngularSpeed * dt /2.0f) * I4 + (2.0f/totalAngularSpeed) * sinf(totalAngularSpeed * dt /2.0f) * Omega))*attitude;
 
     return attitude;
 }
@@ -51,10 +52,10 @@ Eigen::Vector4f AttitudeEstimation::linearization() {
 Eigen::Vector4f AttitudeEstimation::attitudeEstimation(float gyro_array[3] ) {
     
     // turn gyro into 3x1 Eigen matrix
-    Eigen::Map<Eigen::MatrixXf> gyro(gyro_array, 3,1);
+    Eigen::Map<Eigen::MatrixXf> gyro_mat(gyro_array, 3,1);
    
     // get attitude by integrating gyroscopic rates
-    attitude += gyro * dt;
+    // attitude += gyro_mat * dt;
     
     /*
     Apply discretization because we are using discrete Kalman Filter and it
@@ -75,5 +76,7 @@ Eigen::Vector4f AttitudeEstimation::attitudeEstimation(float gyro_array[3] ) {
 }
 
 Eigen::Vector4f AttitudeEstimation::getPredictionCovariance() {
+
+    return attitude;
 
 }

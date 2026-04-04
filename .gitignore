@@ -27,6 +27,7 @@ _deps/
 *.code-workspace
 .settings
 
+.vscode/launch.json
 # --- STM32CubeMX / IDE Specifics ---
 # Ignore the log files and temporary backup files
 *.log

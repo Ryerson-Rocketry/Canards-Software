@@ -10,11 +10,11 @@ class AttitudeEstimation
 private:
     float dt;
     Eigen::Matrix<float, 3, 1> gyro;
-    Eigen::MatrixXd I4;
+    Eigen::Matrix4f I4;
     Eigen::Matrix4f Omega;
 
     Eigen::Vector4f discretization();
-    Eigen::Vector4f AttitudeEstimation::linearization();
+    Eigen::Vector4f linearization();
 
 
 
@@ -23,5 +23,5 @@ public:
     ~AttitudeEstimation();
     Eigen::Vector4f attitude;
     Eigen::Vector4f attitudeEstimation(float gyro_array[3]);
-    Eigen::Vector4f AttitudeEstimation::getPredictionCovariance();
+    Eigen::Vector4f getPredictionCovariance();
 };
