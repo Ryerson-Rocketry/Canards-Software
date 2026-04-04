@@ -1,201 +1,279 @@
-#include "ms5611.h"
-#include "spi.h"
-#include "math.h"
-#include "cmsis_os.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
+/*
+ * barometer.c
+ *
+ *  Created on: 5 oct. 2018
+ *      Author: alex
+ */
 
-extern SemaphoreHandle_t gSpi2Mutex;
+#include "Drivers/ms5611.h"
+#include "stm32f4xx_hal.h"
+#include <math.h>
 
-#define BARO_CS_GPIO_PORT BARO_CS_PORT
-#define BARO_CS_GPIO_PIN BARO_CS_PIN
+// TODO : set a proper timing
+#define SPI_TIMEOUT 50 // in ms
 
-static inline void BARO_CS_LOW(void)
+#define MS5611_EN HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+#define MS5611_DIS HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+#define CMD_RESET 0x1E
+#define CMD_PROM_C1 0xA2
+#define CMD_PROM_C2 0xA4
+#define CMD_PROM_C3 0xA6
+#define CMD_PROM_C4 0xA8
+#define CMD_PROM_C5 0xAA
+#define CMD_PROM_C6 0xAC
+
+#define PRESSURE_OSR_256 0x40
+#define PRESSURE_OSR_512 0x42
+#define PRESSURE_OSR_1024 0x44
+#define PRESSURE_OSR_2048 0x46
+#define PRESSURE_OSR_4096 0x48
+
+#define TEMP_OSR_256 0x50
+#define TEMP_OSR_512 0x52
+#define TEMP_OSR_1024 0x54
+#define TEMP_OSR_2048 0x56
+#define TEMP_OSR_4096 0x58
+
+#define CONVERSION_OSR_256 1
+#define CONVERSION_OSR_512 2
+#define CONVERSION_OSR_1024 3
+#define CONVERSION_OSR_2048 5
+#define CONVERSION_OSR_4096 10
+
+static uint16_t prom[6];
+extern SPI_HandleTypeDef hspi2;
+
+// min OSR by default
+static uint8_t pressAddr = PRESSURE_OSR_256;
+static uint8_t tempAddr = TEMP_OSR_256;
+static uint32_t convDelay = CONVERSION_OSR_256;
+
+static int32_t temperature;
+static int32_t pressure;
+static float altitude;
+
+/**
+ * @brief init the pressure sensor with default parameters
+ */
+static void ms5611_init();
+
+/**
+ * @brief write the command passed in parameters to the SPI Bus
+ *
+ * @param data the command to write
+ */
+static void ms5611_write(uint8_t data);
+
+/**
+ * @brief read the n bits of the SPI Bus on  register reg
+ *
+ * @return the value read on the SPI bus
+ */
+static uint16_t ms5611_read16bits(uint8_t reg);
+static uint32_t ms5611_read24bits(uint8_t reg);
+
+/**
+ * @brief read the raw value
+ *
+ * @return the value read on the SPI bus
+ */
+static uint32_t ms5611_readRawTemp();
+static uint32_t ms5611_readRawPressure();
+
+static void ms5611_init()
 {
-    HAL_GPIO_WritePin(BARO_CS_GPIO_PORT, BARO_CS_GPIO_PIN, GPIO_PIN_RESET);
+    MS5611_DIS
+    HAL_Delay(10);
+
+    ms5611_write(CMD_RESET);
+    HAL_Delay(10);
+
+    prom[0] = ms5611_read16bits(CMD_PROM_C1);
+    prom[1] = ms5611_read16bits(CMD_PROM_C2);
+    prom[2] = ms5611_read16bits(CMD_PROM_C3);
+    prom[3] = ms5611_read16bits(CMD_PROM_C4);
+    prom[4] = ms5611_read16bits(CMD_PROM_C5);
+    prom[5] = ms5611_read16bits(CMD_PROM_C6);
 }
 
-static inline void BARO_CS_HIGH(void)
+static void ms5611_write(uint8_t data)
 {
-    HAL_GPIO_WritePin(BARO_CS_GPIO_PORT, BARO_CS_GPIO_PIN, GPIO_PIN_SET);
+    MS5611_EN
+    HAL_SPI_Transmit(&hspi2, &data, 1, SPI_TIMEOUT);
+    MS5611_DIS
 }
 
-static HAL_StatusTypeDef ms5611Write(uint8_t val)
+static uint16_t ms5611_read16bits(uint8_t reg)
 {
-    HAL_StatusTypeDef status = HAL_TIMEOUT;
-    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    uint8_t byte[3];
+    uint16_t return_value;
+    MS5611_EN
+    HAL_SPI_TransmitReceive(&hspi2, &reg, byte, 3, SPI_TIMEOUT);
+    MS5611_DIS
+    /**
+     * We dont care about byte[0] because that is what was recorded while
+     * we were sending the first byte of the cmd. Since the baro wasn't sending
+     * actual data at that time (it was listening for command), data[0] will
+     * contain garbage data (probably all 0's).
+     */
+    return_value = ((uint16_t)byte[1] << 8) | (byte[2]);
+    return return_value;
+}
+
+static uint32_t ms5611_read24bits(uint8_t reg)
+{
+    uint8_t byte[4];
+    uint32_t return_value;
+    MS5611_EN
+    HAL_SPI_TransmitReceive(&hspi2, &reg, byte, 4, SPI_TIMEOUT);
+    MS5611_DIS
+    return_value = ((uint32_t)byte[1] << 16) | ((uint32_t)(byte[2] << 8)) | (byte[3]);
+    return return_value;
+}
+
+static uint32_t ms5611_readRawTemp()
+{
+    uint32_t D2;
+    // Convert temp
+    ms5611_write(tempAddr);
+    // Conversion Time
+    HAL_Delay(convDelay);
+    // Read ADC
+    D2 = ms5611_read24bits(0x00);
+
+    return D2;
+}
+
+static uint32_t ms5611_readRawPressure()
+{
+    uint32_t D1;
+    // Convert pressure
+    ms5611_write(pressAddr);
+    // Conversion time
+    HAL_Delay(convDelay);
+    // Read ADC
+    D1 = ms5611_read24bits(0x00);
+
+    return D1;
+}
+
+void Barometer_init()
+{
+    ms5611_init();
+}
+
+void Barometer_setOSR(OSR osr)
+{
+    switch (osr)
     {
-        BARO_CS_LOW();
-        status = HAL_SPI_Transmit(&hspi2, &val, sizeof(val), 100);
-        BARO_CS_HIGH();
-        xSemaphoreGive(gSpi2Mutex);
-    }
-
-    return status;
-}
-
-static HAL_StatusTypeDef ms5611Read(uint8_t reg, uint8_t *val, int length)
-{
-    HAL_StatusTypeDef status = HAL_TIMEOUT;
-    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-    {
-        BARO_CS_LOW();
-        status = HAL_SPI_Transmit(&hspi2, &reg, 1, 100);
-        if (status == HAL_OK)
-        {
-            status = HAL_SPI_Receive(&hspi2, val, length, 100);
-        }
-        BARO_CS_HIGH();
-        xSemaphoreGive(gSpi2Mutex);
-    }
-    return status;
-}
-
-HAL_StatusTypeDef ms5611Reset(void)
-{
-    HAL_StatusTypeDef status = ms5611Write(MS5611_RESET_REG);
-    osDelay(2);
-    return status;
-}
-
-uint32_t ms5611ReadADC(void)
-{
-    uint8_t tx = MS5611_ADC_REG;
-    uint8_t rx[3];
-
-    ms5611Read(tx, rx, 3);
-
-    return ((uint32_t)(rx[0] << 16)) | ((uint32_t)rx[1] << 8) | rx[2];
-}
-
-// what?? I can't even find the formula for this or I am just blind
-uint8_t crc4(uint16_t n_prom[])
-{
-    uint16_t n_rem = 0; // CRC remainder
-
-    // Make a copy of the last word and clear the 4 CRC bits
-    uint16_t crc_read = n_prom[7];
-    n_prom[7] = (n_prom[7] & 0xFFF0);
-
-    for (uint8_t cnt = 0; cnt < 16; cnt++)
-    { // Loop for all 16 bytes
-        // Select MSB or LSB
-        if (cnt % 2 == 1)
-        {
-            n_rem ^= (uint16_t)((n_prom[cnt >> 1]) & 0x00FF);
-        }
-        else
-        {
-            n_rem ^= (uint16_t)(n_prom[cnt >> 1] >> 8);
-        }
-
-        for (uint8_t n_bit = 8; n_bit > 0; n_bit--)
-        {
-            if (n_rem & 0x8000)
-            {
-                // The polynomial is 0x3000 (equivalent to 0x13 in 4-bit)
-                n_rem = (n_rem << 1) ^ 0x3000;
-            }
-            else
-            {
-                n_rem = (n_rem << 1);
-            }
-        }
-    }
-
-    // Restore the original value of prom[7] (optional, but good practice)
-    n_prom[7] = crc_read;
-
-    // Final 4-bit remainder is the CRC
-    n_rem = ((n_rem >> 12) & 0x000F);
-
-    return (n_rem ^ 0x00);
-}
-
-HAL_StatusTypeDef ms5611ReadPROM(uint16_t out[8])
-{
-
-    for (uint8_t addr = 0; addr < 8; addr++)
-    {
-        uint8_t cmd = MS5611_BASE_PROM_REG | (addr << 1);
-        uint8_t rx[2];
-
-        ms5611Read(cmd, rx, 2);
-
-        // MSB first
-        out[addr] = (uint16_t)(rx[0] << 8) | rx[1];
-    }
-
-    if (out[5] == 0 || out[6] == 0)
-    {
-        return HAL_ERROR;
-    }
-
-    uint8_t crc_calculated = crc4(out);
-    uint8_t crc_stored = (out[7] & 0x000F);
-
-    if (crc_calculated == crc_stored)
-    {
-        return HAL_OK;
-    }
-    return HAL_ERROR;
-}
-
-void ms5611Run(uint16_t prom[8], float *p_out, float *t_out)
-{
-    static int step = 0;
-    static uint32_t D1 = 0, D2 = 0;
-
-    switch (step)
-    {
-    case 0:
-        ms5611Write(MS5611_OSR_D1_4096_REG);
-        step = 1;
-        break;
-
-    case 1:
-        D1 = ms5611ReadADC();
-        ms5611Write(MS5611_OSR_D2_4096_REG);
-        step = 2;
-        break;
-
-    case 2:
-        D2 = ms5611ReadADC();
-
-        int32_t dT = (int32_t)D2 - ((int32_t)prom[5] << 8);
-        int32_t TEMP = 2000 + (((int64_t)dT * (int64_t)prom[6]) >> 23);
-
-        int64_t OFF = ((int64_t)prom[2] << 16) + (((int64_t)prom[4] * (int64_t)dT) >> 7);
-        int64_t SENS = ((int64_t)prom[1] << 15) + (((int64_t)prom[3] * (int64_t)dT) >> 8);
-
-        if (TEMP < 2000)
-        {
-            int64_t T2 = ((int64_t)dT * (int64_t)dT) >> 31;
-            int64_t OFF2 = (5 * ((int64_t)TEMP - 2000) * ((int64_t)TEMP - 2000)) >> 1;
-            int64_t SENS2 = (5 * ((int64_t)TEMP - 2000) * ((int64_t)TEMP - 2000)) >> 2;
-
-            if (TEMP < -1500)
-            {
-                int64_t diff = (int64_t)TEMP + 1500;
-                OFF2 += 7 * (diff * diff);
-                SENS2 += (11 * (diff * diff)) >> 1;
-            }
-
-            TEMP -= (int32_t)T2;
-            OFF -= OFF2;
-            SENS -= SENS2;
-        }
-
-        int32_t P = (int32_t)(((((int64_t)D1 * SENS) >> 21) - OFF) >> 15);
-
-        *p_out = (float)P;
-        *t_out = (float)TEMP / 100.0f;
-
-        step = 0;
-        break;
-
     default:
-        step = 0;
+    case OSR_256:
+        pressAddr = PRESSURE_OSR_256;
+        tempAddr = TEMP_OSR_256;
+        convDelay = CONVERSION_OSR_256;
+        break;
+    case OSR_512:
+        pressAddr = PRESSURE_OSR_512;
+        tempAddr = TEMP_OSR_512;
+        convDelay = CONVERSION_OSR_512;
+        break;
+    case OSR_1024:
+        pressAddr = PRESSURE_OSR_1024;
+        tempAddr = TEMP_OSR_1024;
+        convDelay = CONVERSION_OSR_1024;
+        break;
+    case OSR_2048:
+        pressAddr = PRESSURE_OSR_2048;
+        tempAddr = TEMP_OSR_2048;
+        convDelay = CONVERSION_OSR_2048;
+        break;
+    case OSR_4096:
+        pressAddr = PRESSURE_OSR_4096;
+        tempAddr = TEMP_OSR_4096;
+        convDelay = CONVERSION_OSR_4096;
         break;
     }
+}
+
+int32_t Barometer_getTemp(bool calculate)
+{
+    if (calculate)
+    {
+        Barometer_calculate();
+    }
+    return temperature;
+}
+
+int32_t Barometer_getPressure(bool calculate)
+{
+    if (calculate)
+    {
+        Barometer_calculate();
+    }
+    return pressure;
+}
+
+float Barometer_getAltitude(bool calculate)
+{
+    if (calculate)
+    {
+        Barometer_calculate();
+    }
+    return altitude;
+}
+
+void Barometer_calculate()
+{
+    int32_t dT;
+    int64_t TEMP, OFF, SENS, P;
+    uint32_t D1, D2;
+    float press, r, c;
+
+    D1 = ms5611_readRawPressure();
+    D2 = ms5611_readRawTemp();
+
+    dT = D2 - ((long)prom[4] * 256);
+    TEMP = 2000 + ((int64_t)dT * prom[5]) / 8388608;
+    OFF = (int64_t)prom[1] * 65536 + ((int64_t)prom[3] * dT) / 128;
+    SENS = (int64_t)prom[0] * 32768 + ((int64_t)prom[2] * dT) / 256;
+
+    if (TEMP < 2000)
+    { // second order temperature compensation
+        int64_t T2 = (((int64_t)dT) * dT) >> 31;
+        int64_t Aux_64 = (TEMP - 2000) * (TEMP - 2000);
+        int64_t OFF2 = (5 * Aux_64) >> 1;
+        int64_t SENS2 = (5 * Aux_64) >> 2;
+        TEMP = TEMP - T2;
+        OFF = OFF - OFF2;
+        SENS = SENS - SENS2;
+    }
+
+    P = (D1 * SENS / 2097152 - OFF) / 32768;
+    temperature = TEMP;
+    pressure = P;
+
+    press = (float)pressure;
+    r = press / 101325.0;
+    c = 1.0 / 5.255;
+    altitude = (1 - pow(r, c)) * 44330.77;
+}
+
+static float groundPressurePa = 101325.0f; // Default to standard
+
+void setGroundPressure(float p)
+{
+    groundPressurePa = p;
+}
+
+float getGroundPressure(void)
+{
+    return groundPressurePa;
+}
+
+float getRelativeAltitude(float currentPressurePa)
+{
+    // Standard atmosphere formula relative to ground pressure
+    // 44330.0f * (1 - (P/P0)^0.1903)
+    return 44330.0f * (1.0f - powf(currentPressurePa / groundPressurePa, 0.1903f));
 }

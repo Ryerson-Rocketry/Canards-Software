@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.22)
-
 #
 # This file is generated only once,
 # and is not re-generated if converter is called multiple times.
@@ -12,6 +11,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+set(CMAKE_CXX_STANDARD 14) 
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -31,6 +33,23 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
 
+# FPU Configuration for STM32F446RE (Cortex-M4F)
+# Must come AFTER project() declaration
+add_compile_options(
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+)
+
+# Add the same flags to linker
+add_link_options(
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+)
+
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
@@ -41,6 +60,10 @@ add_subdirectory(cmake/stm32cubemx)
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
+# Find the Eigen package
+set(Eigen3_DIR "C:/msys64/mingw64/share/eigen3/cmake")
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -51,8 +74,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/StateEstimation/altitude_estimation.c
     Core/Src/Utils/math_utils.c
     Core/Src/Utils/servo.c
-    Core/Src/Drivers/ubloxm9n.c
-    Core/Src/Utils/nmea_parse.c
+    Core/Src/Drivers/rfm69.c
+    Core/Src/StateEstimation/attitude_estimation.cpp
+    Core/Src/StateEstimation/math_utils.cpp
 )
 
 # Add include paths
@@ -66,6 +90,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+    ARM_MATH_CM4
     # Add user defined symbols
 )
 
@@ -75,6 +100,7 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
-
+    -u _printf_float
     # Add user defined libraries
+    Eigen3::Eigen
 )

@@ -15,6 +15,21 @@
                 "isDefault": true
             },
             "problemMatcher": "$gcc"
-        }
+        },
+        {
+            "label": "STM32: Build Release",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build/Release",
+                "--config",
+                "Release",
+                "-j4"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc",
+            "dependsOn": "STM32: Configure Release"
+        },
     ]
 }
