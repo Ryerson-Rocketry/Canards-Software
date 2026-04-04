@@ -11,6 +11,10 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+set(CMAKE_CXX_STANDARD 14) 
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
+
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
@@ -56,6 +60,10 @@ add_subdirectory(cmake/stm32cubemx)
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
+# Find the Eigen package
+set(Eigen3_DIR "C:/msys64/mingw64/share/eigen3/cmake")
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -67,8 +75,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Utils/math_utils.c
     Core/Src/Utils/servo.c
     Core/Src/Drivers/rfm69.c
-    Core/Src/Drivers/ubloxm9n.c
-    Core/Src/Utils/nmea_parse.c
+    Core/Src/StateEstimation/attitude_estimation.cpp
+    Core/Src/StateEstimation/math_utils.cpp
 )
 
 # Add include paths
@@ -94,4 +102,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
     -u _printf_float
     # Add user defined libraries
+    Eigen3::Eigen
 )

@@ -23,8 +23,6 @@
 #include "Configs/flight_configs.h"
 #include "Utils/servo.h"
 #include "Drivers/rfm69.h"
-#include "Drivers/ubloxm9n.h"
-#include "Utils/nmea_parse.h"
 #include "i2c.h"
 #include "Drivers/ms5611.h"
 
@@ -43,12 +41,13 @@ SemaphoreHandle_t gSpi2Mutex;
 
 osThreadId_t readSensorTaskHandle;
 osThreadId_t altEstTaskHandle;
+osThreadId_t oriEstTaskHandle;
 osThreadId_t launchDetTaskHandle;
 osThreadId_t dataStoreTaskHandle;
 osThreadId_t gpsRetrieveTaskHandle;
-osThreadId_t heartbeatTaskHandle;
 osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
+osThreadId_t heartbeatTaskHandle;
 
 Rocket_States_t Rocket;
 
@@ -58,11 +57,14 @@ volatile bool launchDetTask = false;
 volatile bool dataStoreTask = false;
 volatile bool radioTask = false;
 volatile bool controlTask = false;
+volatile bool oriEstTask = false;
 
 const osThreadAttr_t readSensorTask_attributes = {
     .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
 const osThreadAttr_t altEstTask_attributes = {
     .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
+const osThreadAttr_t oriEstTask_attributes = {
+    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t launchDetTask_attributes = {
     .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
@@ -76,6 +78,7 @@ const osThreadAttr_t radiotask_attributes = {
 
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
+void vOriEstTask(void *argument);
 void vLaunchDetTask(void *argument);
 void vDataStoreTask(void *argument);
 void vControlTask(void *argument);
@@ -286,6 +289,10 @@ void vAltEstTask(void *argument)
   }
 }
 
+void vOriEstTask(void *argument)
+{
+}
+
 void vLaunchDetTask(void *argument)
 {
   float accel_z;
@@ -437,7 +444,7 @@ void vDataStoreTask(void *argument)
 
     // Now format the snapshot into CSV
     int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
-    len += snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.flightState);
+    len += snprintf(csvBuffer, sizeof(csvBuffer), "%d", Rocket.snapshot.flightState);
 
 #define APPEND_SCALED(value) \
   len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)((value) * 100))
