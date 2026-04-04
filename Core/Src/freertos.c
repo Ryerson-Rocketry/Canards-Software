@@ -490,6 +490,8 @@ void vDataStoreTask(void *argument)
       HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     }
 
+    // write queue to send data to vRadioTask
+
     dataStoreTask = true;
   }
 }
@@ -588,31 +590,27 @@ void vHeartbeatTask(void *argument)
 void vRadioTask(void *argument)
 {
 
+  // i2c scanner code here
+
+  // tasks:
+  // 1. write the I2C scanenr to get the ESP32 address, save it
+  // 2. Initialize and use queue to send variable "len" from vDataStoreTask to vRadioTask
+  // 3. Send the variable "len" to ESP32 using I2C
+  // 4. retrieve data using esp32, then transmit it via radio
+
+  if (address != 0x00)
+  {
+    foudnAddress = address;
+  }
+
+  printf(foundAddress);
+
   for (;;)
   {
-    // if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-    // {
-    //   int len = snprintf((char *)data, sizeof(data),
-    //                      "%lu,%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%d,%d\r\n",
-    //                      Rocket.snapshot.timestamp,
-    //                      (int)(Rocket.snapshot.accel[0] * 100),
-    //                      (int)(Rocket.snapshot.accel[1] * 100),
-    //                      (int)(Rocket.snapshot.accel[2] * 100),
-    //                      (int)(Rocket.snapshot.position * 10000),
-    //                      (int)(Rocket.snapshot.velocity * 10000),
-    //                      Rocket.snapshot.latitude,
-    //                      Rocket.snapshot.longitude,
-    //                      Rocket.snapshot.altitude,
-    //                      Rocket.snapshot.speed,
-    //                      Rocket.snapshot.fix,
-    //                      Rocket.snapshot.satelliteCount);
 
-    //   if (len > 0 && len < (int)sizeof(data))
-    //   {
-    //     HAL_I2C_Master_Transmit(&hi2c1, ESP32_ADDR << 1, data, len, 100);
-    //   }
-    //   xSemaphoreGive(gI2c1Mutex);
-    // }
+    // queue here to retrieve data from vDataStoreTask we want the len string
+
+    // i2c master transmit, string = len
 
     radioTask = true;
     osDelay(pdMS_TO_TICKS(100));
