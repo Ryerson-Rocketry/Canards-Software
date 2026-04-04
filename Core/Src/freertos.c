@@ -287,8 +287,9 @@ void vAltEstTask(void *argument)
 void vOriEstTask(void *argument)
 {
 
-  for (;;) {
-
+  for (;;)
+  {
+    osDelay(10);
   }
 }
 

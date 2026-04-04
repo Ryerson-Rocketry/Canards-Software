@@ -12,12 +12,13 @@ private:
     float gyroNoiseSigma;
     Eigen::Vector3f gyro;
     Eigen::Matrix4f I4;
-    Eigen::Matrix4f Omega;
+    Eigen::Matrix4f omega;
     Eigen::Matrix4f F;
     Eigen::Matrix4f Q;
     Eigen::Matrix<float, 6,1> Z;
     Eigen::Matrix<float, 6, 6> measurementNoiseCov;
 
+    Eigen::Matrix4f Omega();
     Eigen::Vector4f discretization();
     Eigen::Vector4f linearization();
     Eigen::Matrix4f getStateErrorCovariance();

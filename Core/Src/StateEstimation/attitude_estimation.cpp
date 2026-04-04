@@ -12,11 +12,10 @@ AttitudeEstimation::AttitudeEstimation(/* args */)
     this->attitude = Eigen::Vector4f(1, 0, 0, 0);
     
     this->gyro = Eigen::Vector3f::Zero();
-    this->Omega = Eigen::Matrix4f::Zero();
+    this->omega = Eigen::Matrix4f::Zero();
     this->F = Eigen::Matrix4f::Zero();
     this->stateErrorCov = Eigen::Matrix4f::Identity();
 
-    // change it to Qt = cov of angular velocity * w_t * w_t_Transpose
     this->gyroNoiseSigma = 0.01f; 
     this->measurementNoiseCov = Eigen::Matrix<float, 6, 6>::Identity();
     this->measurementNoiseCov.block<3,3>(0,0) *= 0.1f;  // accel noise
@@ -27,6 +26,18 @@ AttitudeEstimation::~AttitudeEstimation()
 {
 }
 
+Eigen::Matrix4f AttitudeEstimation::Omega() {
+    float wx = this->gyro.x();
+    float wy = this->gyro.y();
+    float wz = this->gyro.z();
+    
+    this->omega << 0,  -wx,  -wy,  -wz,
+          wx,   0,   wz,  -wy,
+          wy,  -wz,   0,   wx,
+          wz,   wy, -wx,   0;
+    
+    return this->omega;
+}
 
 Eigen::Vector4f AttitudeEstimation::discretization() {
 
@@ -34,31 +45,18 @@ Eigen::Vector4f AttitudeEstimation::discretization() {
     
     if (totalAngularSpeed < 1e-6f) return this->attitude;
 
-    float wx = this->gyro.x();
-    float wy = this->gyro.y();
-    float wz = this->gyro.z();
-    
-    Omega << 0,  -wx,  -wy,  -wz,
-          wx,   0,   wz,  -wy,
-          wy,  -wz,   0,   wx,
-          wz,   wy, -wx,   0;
+    this->omega = Omega();
 
-    this->attitude = ((cosf(totalAngularSpeed * this->dt /2.0f) * this->I4 + (2.0f/totalAngularSpeed) * sinf(totalAngularSpeed * this->dt /2.0f) * Omega))*this->attitude;
+    this->attitude = ((cosf(totalAngularSpeed * this->dt /2.0f) * this->I4 + (2.0f/totalAngularSpeed) * sinf(totalAngularSpeed * this->dt /2.0f) * this->omega))*this->attitude;
 
     return this->attitude;
 }
 
 Eigen::Vector4f AttitudeEstimation::linearization() {
-    float wx = this->gyro.x();
-    float wy = this->gyro.y();
-    float wz = this->gyro.z();
+    
+    this->omega = Omega();
 
-    Omega << 0,  -wx,  -wy,  -wz,
-        wx,   0,   wz,  -wy,
-        wy,  -wz,   0,   wx,
-        wz,   wy, -wx,   0;
-
-    this->attitude = (I4 + this->dt * Omega / 2) * this->attitude;
+    this->attitude = (I4 + this->dt * this->omega / 2) * this->attitude;
 
     return this->attitude;
 }
@@ -75,7 +73,8 @@ Eigen::Matrix4f AttitudeEstimation::getStateErrorCovariance() {
 
     Eigen::Matrix4f F_Transpose = F.transpose(); 
 
-    this->Q = gyroNoiseSigma * gyroNoiseSigma * Omega * Omega.transpose() * this->dt;
+    this->omega = Omega();
+    this->Q = gyroNoiseSigma * gyroNoiseSigma * this->omega * this->omega.transpose() * this->dt;
     this->stateErrorCov = F * this->stateErrorCov * F_Transpose + this->Q;
 
     return this->stateErrorCov;
