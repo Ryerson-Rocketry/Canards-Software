@@ -51,6 +51,7 @@ osThreadId_t heartbeatTaskHandle;
 
 Rocket_States_t Rocket;
 
+// watchdog task flags
 volatile bool readSensorTask = false;
 volatile bool altEstTask = false;
 volatile bool launchDetTask = false;
