@@ -65,7 +65,7 @@ const osThreadAttr_t readSensorTask_attributes = {
 const osThreadAttr_t altEstTask_attributes = {
     .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
-    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal3};
+    .name = "attitudeTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t launchDetTask_attributes = {
     .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
@@ -277,12 +277,6 @@ void vAltEstTask(void *argument)
     // update rocket state estimate and gyro integration
     Rocket.estimate.timestamp = current_tick;
     Rocket.estimate.acceleration = accel_in_m_s2;
-    Rocket.estimate.rpy[0] += Rocket.rawData.gyro[2] * dt;
-    Rocket.estimate.rpy[1] += Rocket.rawData.gyro[0] * dt;
-    Rocket.estimate.rpy[2] += Rocket.rawData.gyro[1] * dt;
-    Rocket.estimate.tilt_angle = sqrtf(
-        Rocket.estimate.rpy[1] * Rocket.estimate.rpy[1] +
-        Rocket.estimate.rpy[2] * Rocket.estimate.rpy[2]);
 
     xTaskNotifyGive(controlTaskHandle);
     xTaskNotifyGive((TaskHandle_t)dataStoreTaskHandle);
@@ -292,6 +286,10 @@ void vAltEstTask(void *argument)
 
 void vOriEstTask(void *argument)
 {
+
+  for (;;) {
+
+  }
 }
 
 void vLaunchDetTask(void *argument)
