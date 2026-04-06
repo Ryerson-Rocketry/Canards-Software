@@ -47,16 +47,7 @@ Eigen::Vector4f AttitudeEstimation::discretization() {
 
     this->omega = Omega();
 
-    this->attitude = ((cosf(totalAngularSpeed * this->dt /2.0f) * this->I4 + (2.0f/totalAngularSpeed) * sinf(totalAngularSpeed * this->dt /2.0f) * this->omega))*this->attitude;
-
-    return this->attitude;
-}
-
-Eigen::Vector4f AttitudeEstimation::linearization() {
-    
-    this->omega = Omega();
-
-    this->attitude = (I4 + this->dt * this->omega / 2) * this->attitude;
+    this->attitude = ((cosf(totalAngularSpeed * this->dt /2.0f) * this->I4 + (1.0f/totalAngularSpeed) * sinf(totalAngularSpeed * this->dt /2.0f) * this->omega))*this->attitude;
 
     return this->attitude;
 }
@@ -86,22 +77,13 @@ Eigen::Vector4f AttitudeEstimation::attitudeEstimation(float gyro_array[3] ) {
     // turn gyro into 3x1 Eigen matrix
     Eigen::Map<Eigen::Vector3f> gyroInput(gyro_array);
     this->gyro = gyroInput; 
-   
-    
+    this->gyro = this->gyro * M_PI / 180.0f;
     /*
     Apply discretization because we are using discrete Kalman Filter and it
     preserves the physics when we step from one time instant to the next
     */
 
     this->attitude = discretization();
-
-
-    /*
-    We NEED to linearize our data as it's currently nonlinear and Kalman filters
-    only accept linear data so we must take the derivative of it
-    */ 
-
-    this->attitude = linearization();
 
     // predict Pt, the state error covariance
     this->getStateErrorCovariance();
@@ -111,12 +93,25 @@ Eigen::Vector4f AttitudeEstimation::attitudeEstimation(float gyro_array[3] ) {
 
 Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], float mag_array[3]) {
     
-    // Pack measurements into Z (6x1)
-    this->Z << accel_array[0], accel_array[1], accel_array[2],
-               mag_array[0],   mag_array[1],   mag_array[2];
+    float mag_n[3] = {mag_array[0], mag_array[1], mag_array[2]};
+    float mag_norm = sqrtf(mag_array[0]*mag_array[0] + mag_array[1]*mag_array[1] + mag_array[2]*mag_array[2]);
+    if (mag_norm > 0.001f) {
+        mag_n[0] = mag_array[0]/mag_norm;
+        mag_n[1] = mag_array[1]/mag_norm;
+        mag_n[2] = mag_array[2]/mag_norm;
+    }
 
-    // Reference vectors
-    Eigen::Vector3f g(0.0f, 0.0f, 9.81f);
+    float accel_norm = sqrtf(accel_array[0]*accel_array[0] + accel_array[1]*accel_array[1] + accel_array[2]*accel_array[2]);
+    float accel_n[3] = {accel_array[0], accel_array[1], accel_array[2]};
+    if (accel_norm > 0.001f) {
+        accel_n[0] /= accel_norm;
+        accel_n[1] /= accel_norm;
+        accel_n[2] /= accel_norm;
+    }
+    this->Z << accel_n[0], accel_n[1], accel_n[2],
+            mag_n[0],   mag_n[1],   mag_n[2];
+
+    Eigen::Vector3f g(0.0f, 0.0f, 1.0f); 
     Eigen::Vector3f r(1.0f, 0.0f, 0.0f);
 
     // Extract quaternion parts

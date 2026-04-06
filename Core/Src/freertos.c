@@ -145,7 +145,6 @@ void vReadSensorTask(void *argument)
       /* Convert units */
       Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
       Rocket.rawData.temperature = t_centiC / 100.0f;
-      Rocket.estimate.position = 44330.0f * (1.0f - powf(Rocket.rawData.pressure / SEA_LEVEL_PA, 0.1903f));
       xSemaphoreGive(gSpi2Mutex);
     }
 
@@ -589,7 +588,7 @@ void vControlTask(void *argument)
         integral += rollError * 0.01f;
       }
 
-      derivative = Rocket.rawData.gyro[2];
+      derivative = Rocket.rawData.gyro[0];
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
       Rocket.control.pwmAngle = moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
     }

@@ -19,7 +19,6 @@ private:
 
     Eigen::Matrix4f Omega();
     Eigen::Vector4f discretization();
-    Eigen::Vector4f linearization();
     Eigen::Matrix4f getStateErrorCovariance();
 
 
