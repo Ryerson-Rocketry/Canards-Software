@@ -8,7 +8,6 @@
 class AttitudeEstimation
 {
 private:
-    float dt;
     float gyroNoiseSigma;
     Eigen::Vector3f gyro;
     Eigen::Matrix4f I4;
@@ -29,7 +28,7 @@ public:
     ~AttitudeEstimation();
     Eigen::Vector4f attitude;
     Eigen::Matrix4f stateErrorCov;
-
+    float dt;
     Eigen::Vector4f attitudeEstimation(float gyro_array[3]);
     Eigen::Vector4f attitudeCorrection(float accel_array[3], float mag_array[3]);
 

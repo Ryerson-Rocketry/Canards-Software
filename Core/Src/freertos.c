@@ -12,7 +12,6 @@
 #include "semphr.h"
 #include "usart.h"
 #include "spi.h"
-#include "iwdg.h"
 #include "stdint.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -25,6 +24,7 @@
 #include "Drivers/rfm69.h"
 #include "i2c.h"
 #include "Drivers/ms5611.h"
+#include "attitude_estimation_wrapper.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -49,6 +49,7 @@ osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
 
+// struct data handle init
 Rocket_States_t Rocket;
 
 // watchdog task flags
@@ -105,6 +106,7 @@ void MX_FREERTOS_Init(void)
 
   readSensorTaskHandle = osThreadNew(vReadSensorTask, NULL, &readSensorTask_attributes);
   altEstTaskHandle = osThreadNew(vAltEstTask, NULL, &altEstTask_attributes);
+  oriEstTaskHandle = osThreadNew(vOriEstTask, NULL, &oriEstTask_attributes);
   launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
   dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
   controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
@@ -119,7 +121,6 @@ void vReadSensorTask(void *argument)
   const float alpha_accel = 0.1f;
   static float gyro_filt[3] = {0.0f, 0.0f, 0.0f};
   const float alpha_gyro = 0.2f;
-  Rocket_States_t Rocket = {0};
 
   magInit();
   LSM6DSO32_Rocket_Init(&hspi1);
@@ -185,7 +186,6 @@ void vReadSensorTask(void *argument)
     Rocket.rawData.timestamp = osKernelGetTickCount();
 
     xTaskNotifyGive(launchDetTaskHandle);
-    xTaskNotifyGive(altEstTaskHandle);
 
     readSensorTask = true;
     osDelay(10);
@@ -225,8 +225,6 @@ void vAltEstTask(void *argument)
   float accel_in_m_s2;
   float baro_altitude;
 
-  Rocket.estimate.tilt_angle = 90.0f;
-
   for (;;)
   {
     if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY) == 0)
@@ -263,7 +261,7 @@ void vAltEstTask(void *argument)
       systemCov[1][1] = 10.0f;
     }
 
-    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle);
+    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
     if (fabsf(accel_in_m_s2) > 500.0f)
       accel_in_m_s2 = 0.0f;
 
@@ -278,18 +276,39 @@ void vAltEstTask(void *argument)
     Rocket.estimate.timestamp = current_tick;
     Rocket.estimate.acceleration = accel_in_m_s2;
 
-    xTaskNotifyGive(controlTaskHandle);
-    xTaskNotifyGive((TaskHandle_t)dataStoreTaskHandle);
     altEstTask = true;
   }
 }
 
 void vOriEstTask(void *argument)
 {
+  AttitudeEstimationHandle attitudeEstimationHandle = AttitudeEstimation_create();
+  AttitudeEstimation_setDt(attitudeEstimationHandle, 0.01);
+  float attitude[4];
+  float attitudeRPY[3];
 
   for (;;)
   {
-    osDelay(10);
+
+    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (notification == 0)
+    {
+      oriEstTask = true;
+      continue;
+    }
+
+    AttitudeEstimation_predict(attitudeEstimationHandle, Rocket.rawData.gyro, attitude);
+    AttitudeEstimation_correct(attitudeEstimationHandle, Rocket.rawData.accel, Rocket.rawData.mag, attitude);
+    AttitudeEstimation_getRPY(attitudeEstimationHandle, attitudeRPY);
+
+    Rocket.estimate.rpy[0] = attitudeRPY[0];
+    Rocket.estimate.rpy[1] = attitudeRPY[1];
+    Rocket.estimate.rpy[2] = attitudeRPY[2];
+    Rocket.estimate.tilt_angle = sqrtf(powf(Rocket.estimate.rpy[0], 2.0f) + powf(Rocket.estimate.rpy[1], 2.0f));
+
+    xTaskNotifyGive(controlTaskHandle);
+    oriEstTask = true;
   }
 }
 
@@ -382,6 +401,14 @@ void vLaunchDetTask(void *argument)
       printf("Invalid state somehow...");
       break;
     }
+
+    if (Rocket.flightState != STATE_PAD)
+    {
+      xTaskNotifyGive(altEstTaskHandle);
+      xTaskNotifyGive(oriEstTaskHandle);
+      xTaskNotifyGive(dataStoreTaskHandle);
+    }
+
     launchDetTask = true;
   }
 }
@@ -423,7 +450,14 @@ void vDataStoreTask(void *argument)
 
   for (;;)
   {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (notification == 0)
+    {
+      dataStoreTask = true;
+      continue;
+    }
 
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
@@ -444,7 +478,7 @@ void vDataStoreTask(void *argument)
 
     // Now format the snapshot into CSV
     int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
-    len += snprintf(csvBuffer, sizeof(csvBuffer), "%d", Rocket.snapshot.flightState);
+    len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", Rocket.snapshot.flightState);
 
 #define APPEND_SCALED(value) \
   len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)((value) * 100))
@@ -492,6 +526,7 @@ void vDataStoreTask(void *argument)
 
     // write queue to send data to vRadioTask
 
+    xTaskNotifyGive(radioTaskHandle);
     dataStoreTask = true;
   }
 }
@@ -506,11 +541,15 @@ void vControlTask(void *argument)
   bool startTimeCaptured = false;
   float pitchSetPoint = 0.0f;
 
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
-
   for (;;)
   {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (notification == 0)
+    {
+      controlTask = true;
+      continue;
+    }
 
     // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
     if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
@@ -567,12 +606,13 @@ void vControlTask(void *argument)
 }
 
 void vHeartbeatTask(void *argument)
+
 {
   for (;;)
   {
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
-    if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && controlTask && radioTask)
+    if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && controlTask && radioTask && oriEstTask)
     {
       HAL_IWDG_Refresh(&hiwdg);
       readSensorTask = false;
@@ -581,6 +621,7 @@ void vHeartbeatTask(void *argument)
       dataStoreTask = false;
       controlTask = false;
       radioTask = false;
+      oriEstTask = false;
     }
 
     osDelay(pdMS_TO_TICKS(100));
@@ -600,6 +641,14 @@ void vRadioTask(void *argument)
 
   for (;;)
   {
+
+    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    if (notification == 0)
+    {
+      radioTask = true;
+      continue;
+    }
 
     // queue here to retrieve data from vDataStoreTask we want the len string
 
