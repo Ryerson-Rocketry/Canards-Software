@@ -66,7 +66,7 @@ const osThreadAttr_t readSensorTask_attributes = {
 const osThreadAttr_t altEstTask_attributes = {
     .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
-    .name = "attitudeTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal3};
+    .name = "attitudeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t launchDetTask_attributes = {
     .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
@@ -226,11 +226,7 @@ void vAltEstTask(void *argument)
 
   for (;;)
   {
-    if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY) == 0)
-    {
-      altEstTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     uint32_t current_tick = osKernelGetTickCount();
 
@@ -282,20 +278,24 @@ void vAltEstTask(void *argument)
 void vOriEstTask(void *argument)
 {
   AttitudeEstimationHandle attitudeEstimationHandle = AttitudeEstimation_create();
-  AttitudeEstimation_setDt(attitudeEstimationHandle, 0.01);
   float attitude[4];
   float attitudeRPY[3];
+  static uint32_t last_tick = 0;
+  float dt;
 
   for (;;)
   {
 
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (notification == 0)
-    {
-      oriEstTask = true;
-      continue;
-    }
+    uint32_t current_tick = osKernelGetTickCount();
+    dt = (float)(current_tick - last_tick) / 1000.0f;
+    last_tick = current_tick;
+    if (dt < 0.001f)
+      dt = 0.01f;
+    if (dt > 0.1f)
+      dt = 0.1f;
+    AttitudeEstimation_setDt(attitudeEstimationHandle, dt);
 
     AttitudeEstimation_predict(attitudeEstimationHandle, Rocket.rawData.gyro, attitude);
     AttitudeEstimation_correct(attitudeEstimationHandle, Rocket.rawData.accel, Rocket.rawData.mag, attitude);
@@ -322,13 +322,7 @@ void vLaunchDetTask(void *argument)
 
   for (;;)
   {
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      launchDetTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     uint32_t now = osKernelGetTickCount();
     accel_z = Rocket.rawData.accel[2] - 1000.0f;
@@ -401,12 +395,9 @@ void vLaunchDetTask(void *argument)
       break;
     }
 
-    if (Rocket.flightState != STATE_PAD)
-    {
-      xTaskNotifyGive(altEstTaskHandle);
-      xTaskNotifyGive(oriEstTaskHandle);
-      xTaskNotifyGive(dataStoreTaskHandle);
-    }
+    xTaskNotifyGive(altEstTaskHandle);
+    xTaskNotifyGive(oriEstTaskHandle);
+    xTaskNotifyGive(dataStoreTaskHandle);
 
     launchDetTask = true;
   }
@@ -450,13 +441,7 @@ void vDataStoreTask(void *argument)
   for (;;)
   {
 
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      dataStoreTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
@@ -542,13 +527,7 @@ void vControlTask(void *argument)
 
   for (;;)
   {
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      controlTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
     if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
@@ -641,20 +620,13 @@ void vRadioTask(void *argument)
   for (;;)
   {
 
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      radioTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     // queue here to retrieve data from vDataStoreTask we want the len string
 
     // i2c master transmit, string = len
 
     radioTask = true;
-    osDelay(pdMS_TO_TICKS(100));
   }
 }
 
