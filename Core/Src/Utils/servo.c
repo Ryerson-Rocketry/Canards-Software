@@ -18,6 +18,11 @@ float getSlope(float velocity)
 float getAltitudeScaling(float pressure)
 {
 
+    if (pressure <= 0.0f)
+    {
+        pressure = SEA_LEVEL_PA;
+    }
+
     return 15.6 - 1.27 * logf(pressure);
 }
 
