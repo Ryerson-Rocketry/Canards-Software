@@ -23,6 +23,7 @@ private:
 
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     AttitudeEstimation(/* args */);
     ~AttitudeEstimation();
     Eigen::Vector4f attitude;

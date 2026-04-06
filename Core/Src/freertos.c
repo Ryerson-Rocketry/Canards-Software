@@ -64,15 +64,15 @@ volatile bool oriEstTask = false;
 const osThreadAttr_t readSensorTask_attributes = {
     .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
 const osThreadAttr_t altEstTask_attributes = {
-    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
+    .name = "altTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
-    .name = "attitudeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal3};
+    .name = "attitudeTask", .stack_size = 1024 * 8, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t launchDetTask_attributes = {
-    .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
+    .name = "launchTask", .stack_size = 1024 * 1, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
     .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
 const osThreadAttr_t controlTask_attributes = {
-    .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
+    .name = "controlCanards", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal3};
 const osThreadAttr_t radiotask_attributes = {
@@ -184,6 +184,13 @@ void vReadSensorTask(void *argument)
 
     Rocket.rawData.timestamp = osKernelGetTickCount();
 
+    static bool groundCaptured = false;
+    if (!groundCaptured && Rocket.flightState == STATE_PAD && Rocket.rawData.pressure > 0.0f)
+    {
+      setGroundPressure(Rocket.rawData.pressure);
+      groundCaptured = true;
+    }
+
     xTaskNotifyGive(launchDetTaskHandle);
 
     readSensorTask = true;
@@ -239,22 +246,6 @@ void vAltEstTask(void *argument)
       dt = 0.1f;
 
     stateTransition[0][1] = dt;
-
-    if (Rocket.flightState == STATE_PAD)
-    {
-      static bool groundCaptured = false;
-      if (!groundCaptured)
-      {
-        setGroundPressure(Rocket.rawData.pressure);
-        groundCaptured = true;
-      }
-      Rocket.estimate.position = 0.0f;
-      Rocket.estimate.velocity = 0.0f;
-      systemCov[0][0] = 10.0f;
-      systemCov[0][1] = 0.0f;
-      systemCov[1][0] = 0.0f;
-      systemCov[1][1] = 10.0f;
-    }
 
     accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
     if (fabsf(accel_in_m_s2) > 500.0f)
@@ -336,11 +327,6 @@ void vLaunchDetTask(void *argument)
     switch (Rocket.flightState)
     {
     case STATE_PAD:
-      Rocket.estimate.rpy[0] = 0.0f;
-      Rocket.estimate.rpy[1] = 0.0f;
-      Rocket.estimate.rpy[2] = 0.0f;
-      Rocket.estimate.tilt_angle = 0.0f;
-
       if (accel_z >= 4000.0f)
       {
         if (!threshold_active)
@@ -395,9 +381,29 @@ void vLaunchDetTask(void *argument)
       break;
     }
 
-    xTaskNotifyGive(altEstTaskHandle);
-    xTaskNotifyGive(oriEstTaskHandle);
-    xTaskNotifyGive(dataStoreTaskHandle);
+    if (Rocket.flightState != STATE_PAD)
+    {
+      xTaskNotifyGive(altEstTaskHandle);
+      xTaskNotifyGive(oriEstTaskHandle);
+    }
+
+    if (Rocket.flightState == STATE_BOOST          ||
+        Rocket.flightState == STATE_BURNOUT        ||
+        Rocket.flightState == STATE_CANARDS_ACTIVATE ||
+        Rocket.flightState == STATE_DESCENT)
+    {
+      xTaskNotifyGive(dataStoreTaskHandle);
+    }
+
+    // Satisfy watchdog for tasks intentionally not running in current state
+    if (Rocket.flightState == STATE_PAD)
+    {
+      altEstTask   = true;
+      oriEstTask   = true;
+      dataStoreTask = true;
+      radioTask    = true;
+      controlTask  = true;
+    }
 
     launchDetTask = true;
   }
@@ -442,6 +448,14 @@ void vDataStoreTask(void *argument)
   {
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    // NOTE: UNCOMMENT WHEN FLYING THE ROCKET
+
+    // if (Rocket.flightState == STATE_PAD)
+    // {
+    //   dataStoreTask = true;
+    //   continue;
+    // }
 
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
