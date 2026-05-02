@@ -13,3 +13,4 @@
 #define SERVO_MAX_US 2210
 #define SERVO_CENTER_US 1520
 #define SERVO_US_PER_DEG 7.67f
+#define ESP32_I2C_ADDRESS 48 // 0x30 in hexadecimal

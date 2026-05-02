@@ -77,6 +77,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Drivers/rfm69.c
     Core/Src/StateEstimation/attitude_estimation.cpp
     Core/Src/StateEstimation/attitude_estimation_wrapper.cpp
+    Core/Src/Utils/i2c_scanner.c
 )
 
 # Add include paths

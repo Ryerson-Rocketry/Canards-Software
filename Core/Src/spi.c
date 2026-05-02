@@ -235,6 +235,6 @@ void SPI2_Switch_Settings(uint32_t prescaler, uint32_t polarity, uint32_t phase)
   hspi2.Instance->CR1 |= (prescaler | polarity | phase);
 
   // 4. Re-enable SPI2
-  __HAL_SPI_ENABLE(&hspi2);
+  __HAL_SPI_ENABLE(&hspi2); 
 }
 /* USER CODE END 1 */ /* USER CODE END 1 */

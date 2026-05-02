@@ -25,6 +25,9 @@
 #include "i2c.h"
 #include "Drivers/ms5611.h"
 #include "attitude_estimation_wrapper.h"
+#include "Utils/i2c_scanner.h"
+#include "queue.h"
+#include <string.h>
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -49,8 +52,10 @@ osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
 
+QueueHandle_t radioQueueHandle;
+
 // struct data handle init
-Rocket_States_t Rocket;
+Rocket_States_t Rocket = { .flightState = STATE_CANARDS_ACTIVATE };
 
 // watchdog task flags
 volatile bool readSensorTask = false;
@@ -70,7 +75,7 @@ const osThreadAttr_t oriEstTask_attributes = {
 const osThreadAttr_t launchDetTask_attributes = {
     .name = "launchTask", .stack_size = 1024 * 1, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
-    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
+    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
     .name = "controlCanards", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
@@ -413,7 +418,8 @@ void vDataStoreTask(void *argument)
 {
   UINT bytesWritten;
   uint32_t syncCounter = 0;
-  char csvBuffer[256];
+  char csvBuffer[128];
+  radioQueueHandle = xQueueCreate(1, sizeof(csvBuffer));
 
   if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
   {
@@ -523,6 +529,7 @@ void vDataStoreTask(void *argument)
     }
 
     // write queue to send data to vRadioTask
+    xQueueSend(radioQueueHandle, csvBuffer, 0);
 
     xTaskNotifyGive(radioTaskHandle);
     dataStoreTask = true;
@@ -622,25 +629,26 @@ void vHeartbeatTask(void *argument)
 
 void vRadioTask(void *argument)
 {
-
-  // i2c scanner code here
-
-  // tasks:
-  // 1. write the I2C scanenr to get the ESP32 address, save it
-  // 2. Initialize and use queue to send variable "len" from vDataStoreTask to vRadioTask
-  // 3. Send the variable "len" to ESP32 using I2C
-  // 4. retrieve data using esp32, then transmit it via radio
+  char csvBufferReceived[128]; 
+  char sendingBuffer[128];
+  memset(sendingBuffer, 0, sizeof(sendingBuffer));
+  i2cScanner(); 
 
   for (;;)
   {
-
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    // queue here to retrieve data from vDataStoreTask we want the len string
-
-    // i2c master transmit, string = len
-
-    radioTask = true;
+    // queue here to retrieve data from vDataStoreTask
+    if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS) 
+    { 
+      strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
+      sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
+      if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+      {
+        printf("I2C transmission 1 to ESP32 failed\r\n");
+      } 
+      memset(sendingBuffer, 0, sizeof(sendingBuffer));
+    }
   }
 }
 
