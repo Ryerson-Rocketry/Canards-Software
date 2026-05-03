@@ -605,8 +605,7 @@ void vControlTask(void *argument)
 }
 
 void vHeartbeatTask(void *argument)
-
-{
+{  
   for (;;)
   {
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
@@ -622,7 +621,6 @@ void vHeartbeatTask(void *argument)
       radioTask = false;
       oriEstTask = false;
     }
-
     osDelay(pdMS_TO_TICKS(100));
   }
 }
@@ -637,18 +635,22 @@ void vRadioTask(void *argument)
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    // queue here to retrieve data from vDataStoreTask
     if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS) 
     { 
-      strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
-      sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-      if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+      if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
       {
-        printf("I2C transmission 1 to ESP32 failed\r\n");
-      } 
-      memset(sendingBuffer, 0, sizeof(sendingBuffer));
-    }
+        strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
+        sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
+        if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+        {
+          printf("I2C transmission 1 to ESP32 failed\r\n");
+        } 
+        memset(sendingBuffer, 0, sizeof(sendingBuffer));
+      }
+      xSemaphoreGive(gI2c1Mutex);
+    }    
+
+    radioTask = true;
   }
 }
 
