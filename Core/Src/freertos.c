@@ -25,7 +25,7 @@
 #include "i2c.h"
 #include "Drivers/ms5611.h"
 #include "attitude_estimation_wrapper.h"
-#include "Utils/i2c_scanner.h"
+// #include "Utils/i2c_scanner.h"
 #include "queue.h"
 #include <string.h>
 
@@ -630,7 +630,7 @@ void vRadioTask(void *argument)
   char csvBufferReceived[128]; 
   char sendingBuffer[128];
   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-  i2cScanner(); 
+  // i2cScanner(); 
 
   for (;;)
   {
