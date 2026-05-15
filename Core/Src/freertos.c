@@ -25,6 +25,9 @@
 #include "i2c.h"
 #include "Drivers/ms5611.h"
 #include "attitude_estimation_wrapper.h"
+// #include "Utils/i2c_scanner.h"
+#include "queue.h"
+#include <string.h>
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -49,8 +52,10 @@ osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
 
+QueueHandle_t radioQueueHandle;
+
 // struct data handle init
-Rocket_States_t Rocket;
+Rocket_States_t Rocket = { .flightState = STATE_CANARDS_ACTIVATE };
 
 // watchdog task flags
 volatile bool readSensorTask = false;
@@ -64,15 +69,15 @@ volatile bool oriEstTask = false;
 const osThreadAttr_t readSensorTask_attributes = {
     .name = "readSensorTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
 const osThreadAttr_t altEstTask_attributes = {
-    .name = "altTask", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
+    .name = "altTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
-    .name = "attitudeTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal3};
+    .name = "attitudeTask", .stack_size = 1024 * 8, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t launchDetTask_attributes = {
-    .name = "launchTask", .stack_size = 256 * 2, .priority = osPriorityAboveNormal2};
+    .name = "launchTask", .stack_size = 1024 * 1, .priority = osPriorityAboveNormal2};
 const osThreadAttr_t dataStoreTask_attributes = {
-    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
+    .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
-    .name = "controlCanards", .stack_size = 512 * 2, .priority = osPriorityAboveNormal4};
+    .name = "controlCanards", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 2, .priority = osPriorityBelowNormal3};
 const osThreadAttr_t radiotask_attributes = {
@@ -184,6 +189,13 @@ void vReadSensorTask(void *argument)
 
     Rocket.rawData.timestamp = osKernelGetTickCount();
 
+    static bool groundCaptured = false;
+    if (!groundCaptured && Rocket.flightState == STATE_PAD && Rocket.rawData.pressure > 0.0f)
+    {
+      setGroundPressure(Rocket.rawData.pressure);
+      groundCaptured = true;
+    }
+
     xTaskNotifyGive(launchDetTaskHandle);
 
     readSensorTask = true;
@@ -226,11 +238,7 @@ void vAltEstTask(void *argument)
 
   for (;;)
   {
-    if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY) == 0)
-    {
-      altEstTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     uint32_t current_tick = osKernelGetTickCount();
 
@@ -243,22 +251,6 @@ void vAltEstTask(void *argument)
       dt = 0.1f;
 
     stateTransition[0][1] = dt;
-
-    if (Rocket.flightState == STATE_PAD)
-    {
-      static bool groundCaptured = false;
-      if (!groundCaptured)
-      {
-        setGroundPressure(Rocket.rawData.pressure);
-        groundCaptured = true;
-      }
-      Rocket.estimate.position = 0.0f;
-      Rocket.estimate.velocity = 0.0f;
-      systemCov[0][0] = 10.0f;
-      systemCov[0][1] = 0.0f;
-      systemCov[1][0] = 0.0f;
-      systemCov[1][1] = 10.0f;
-    }
 
     accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
     if (fabsf(accel_in_m_s2) > 500.0f)
@@ -282,20 +274,24 @@ void vAltEstTask(void *argument)
 void vOriEstTask(void *argument)
 {
   AttitudeEstimationHandle attitudeEstimationHandle = AttitudeEstimation_create();
-  AttitudeEstimation_setDt(attitudeEstimationHandle, 0.01);
   float attitude[4];
   float attitudeRPY[3];
+  static uint32_t last_tick = 0;
+  float dt;
 
   for (;;)
   {
 
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (notification == 0)
-    {
-      oriEstTask = true;
-      continue;
-    }
+    uint32_t current_tick = osKernelGetTickCount();
+    dt = (float)(current_tick - last_tick) / 1000.0f;
+    last_tick = current_tick;
+    if (dt < 0.001f)
+      dt = 0.01f;
+    if (dt > 0.1f)
+      dt = 0.1f;
+    AttitudeEstimation_setDt(attitudeEstimationHandle, dt);
 
     AttitudeEstimation_predict(attitudeEstimationHandle, Rocket.rawData.gyro, attitude);
     AttitudeEstimation_correct(attitudeEstimationHandle, Rocket.rawData.accel, Rocket.rawData.mag, attitude);
@@ -322,13 +318,7 @@ void vLaunchDetTask(void *argument)
 
   for (;;)
   {
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      launchDetTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     uint32_t now = osKernelGetTickCount();
     accel_z = Rocket.rawData.accel[2] - 1000.0f;
@@ -342,11 +332,6 @@ void vLaunchDetTask(void *argument)
     switch (Rocket.flightState)
     {
     case STATE_PAD:
-      Rocket.estimate.rpy[0] = 0.0f;
-      Rocket.estimate.rpy[1] = 0.0f;
-      Rocket.estimate.rpy[2] = 0.0f;
-      Rocket.estimate.tilt_angle = 0.0f;
-
       if (accel_z >= 4000.0f)
       {
         if (!threshold_active)
@@ -405,7 +390,24 @@ void vLaunchDetTask(void *argument)
     {
       xTaskNotifyGive(altEstTaskHandle);
       xTaskNotifyGive(oriEstTaskHandle);
+    }
+
+    if (Rocket.flightState == STATE_BOOST          ||
+        Rocket.flightState == STATE_BURNOUT        ||
+        Rocket.flightState == STATE_CANARDS_ACTIVATE ||
+        Rocket.flightState == STATE_DESCENT)
+    {
       xTaskNotifyGive(dataStoreTaskHandle);
+    }
+
+    // Satisfy watchdog for tasks intentionally not running in current state
+    if (Rocket.flightState == STATE_PAD)
+    {
+      altEstTask   = true;
+      oriEstTask   = true;
+      dataStoreTask = true;
+      radioTask    = true;
+      controlTask  = true;
     }
 
     launchDetTask = true;
@@ -416,7 +418,8 @@ void vDataStoreTask(void *argument)
 {
   UINT bytesWritten;
   uint32_t syncCounter = 0;
-  char csvBuffer[256];
+  char csvBuffer[128];
+  radioQueueHandle = xQueueCreate(1, sizeof(csvBuffer));
 
   if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
   {
@@ -450,13 +453,15 @@ void vDataStoreTask(void *argument)
   for (;;)
   {
 
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (notification == 0)
-    {
-      dataStoreTask = true;
-      continue;
-    }
+    // NOTE: UNCOMMENT WHEN FLYING THE ROCKET
+
+    // if (Rocket.flightState == STATE_PAD)
+    // {
+    //   dataStoreTask = true;
+    //   continue;
+    // }
 
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
@@ -524,6 +529,7 @@ void vDataStoreTask(void *argument)
     }
 
     // write queue to send data to vRadioTask
+    xQueueSend(radioQueueHandle, csvBuffer, 0);
 
     xTaskNotifyGive(radioTaskHandle);
     dataStoreTask = true;
@@ -542,13 +548,7 @@ void vControlTask(void *argument)
 
   for (;;)
   {
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      controlTask = true;
-      continue;
-    }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
     if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
@@ -605,8 +605,7 @@ void vControlTask(void *argument)
 }
 
 void vHeartbeatTask(void *argument)
-
-{
+{  
   for (;;)
   {
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
@@ -622,39 +621,36 @@ void vHeartbeatTask(void *argument)
       radioTask = false;
       oriEstTask = false;
     }
-
     osDelay(pdMS_TO_TICKS(100));
   }
 }
 
 void vRadioTask(void *argument)
 {
-
-  // i2c scanner code here
-
-  // tasks:
-  // 1. write the I2C scanenr to get the ESP32 address, save it
-  // 2. Initialize and use queue to send variable "len" from vDataStoreTask to vRadioTask
-  // 3. Send the variable "len" to ESP32 using I2C
-  // 4. retrieve data using esp32, then transmit it via radio
+  char csvBufferReceived[128]; 
+  char sendingBuffer[128];
+  memset(sendingBuffer, 0, sizeof(sendingBuffer));
+  // i2cScanner(); 
 
   for (;;)
   {
-
-    uint32_t notification = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    if (notification == 0)
-    {
-      radioTask = true;
-      continue;
-    }
-
-    // queue here to retrieve data from vDataStoreTask we want the len string
-
-    // i2c master transmit, string = len
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS) 
+    { 
+      if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+      {
+        strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
+        sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
+        if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+        {
+          printf("I2C transmission 1 to ESP32 failed\r\n");
+        } 
+        memset(sendingBuffer, 0, sizeof(sendingBuffer));
+      }
+      xSemaphoreGive(gI2c1Mutex);
+    }    
 
     radioTask = true;
-    osDelay(pdMS_TO_TICKS(100));
   }
 }
 
