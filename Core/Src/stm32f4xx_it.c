@@ -89,13 +89,15 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
-  /* USER CODE END HardFault_IRQn 0 */
+  /* Rapid PC13 blink = hard fault */
   while (1)
   {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
+    GPIOC->BSRR = GPIO_PIN_13;
+    for (volatile uint32_t i = 0; i < 16000000; i++);
+    GPIOC->BSRR = (uint32_t)GPIO_PIN_13 << 16u;
+    for (volatile uint32_t i = 0; i < 16000000; i++);
   }
+  /* USER CODE END HardFault_IRQn 0 */
 }
 
 /**
