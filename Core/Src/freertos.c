@@ -28,6 +28,8 @@
 // #include "Utils/i2c_scanner.h"
 #include "queue.h"
 #include <string.h>
+#include "Tasks/sensor.h" 
+#include "Tasks/sdcard.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -127,87 +129,31 @@ void MX_FREERTOS_Init(void)
 
 void vReadSensorTask(void *argument)
 {
-
-  static float accel_filt[3] = {0.0f, 0.0f, 1000.0f};
-  const float alpha_accel = 0.1f;
-  static float gyro_filt[3] = {0.0f, 0.0f, 0.0f};
-  const float alpha_gyro = 0.2f;
-
-  magInit();
-  LSM6DSO32_Rocket_Init(&hspi1);
-  Barometer_init();
-  osDelay(1000);
-
-  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
-  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
-  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+  sensor_HardwareInit();
 
   for (;;)
   {
     // I2C1: Magnetometer
-    magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
-
+    sensor_ReadMagnetometer();
+    
     // SPI2: Barometer
-    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
-    {
-      int32_t p_mbar_x100 = Barometer_getPressure(true);
-      int32_t t_centiC = Barometer_getTemp(false);
+    sensor_ReadBarometer();
 
-      /* Convert units */
-      Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
-      Rocket.rawData.temperature = t_centiC / 100.0f;
-      xSemaphoreGive(gSpi2Mutex);
-    }
+    // SPI1: IMU - accelerometer
+    sensor_ReadIMUAccelerometer();
 
-    // SPI1: IMU
-    if (xSemaphoreTake(gSpi1Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
-    {
-      if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
-      {
-        LSM6DSO32_Read_Accel(Rocket.rawData.accel);
-        for (int i = 0; i < 3; i++)
-        {
-          accel_filt[i] = (alpha_accel * Rocket.rawData.accel[i]) + ((1.0f - alpha_accel) * accel_filt[i]);
-          Rocket.rawData.accel[i] = accel_filt[i];
-        }
-      }
-
-      if (xSemaphoreTake(xImuGyroReadySemaphore, 0) == pdTRUE)
-      {
-        LSM6DSO32_Read_Gyro(Rocket.rawData.gyro);
-        for (int i = 0; i < 3; i++)
-        {
-          // Formula: Smooth Value = (New * Alpha) + (Old * (1 - Alpha))
-          gyro_filt[i] = (alpha_gyro * Rocket.rawData.gyro[i]) + ((1.0f - alpha_gyro) * gyro_filt[i]);
-
-          if (fabsf(gyro_filt[i]) < 0.05f)
-          {
-            Rocket.rawData.gyro[i] = 0.0f;
-          }
-          else
-          {
-            Rocket.rawData.gyro[i] = gyro_filt[i];
-          }
-        }
-      }
-      xSemaphoreGive(gSpi1Mutex);
-    }
+    // SPI1: IMU - gyro
+    sensor_ReadIMUGyro();
 
     Rocket.rawData.timestamp = osKernelGetTickCount();
 
-    static bool groundCaptured = false;
-    if (!groundCaptured && Rocket.flightState == STATE_PAD && Rocket.rawData.pressure > 0.0f)
-    {
-      setGroundPressure(Rocket.rawData.pressure);
-      groundCaptured = true;
-    }
+    sensor_GroundReference();
 
-    xTaskNotifyGive(launchDetTaskHandle);
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
 
     readSensorTask = true;
-    osDelay(10);
+    osDelay(16);
   }
 }
 
@@ -424,145 +370,23 @@ void vLaunchDetTask(void *argument)
 
 void vDataStoreTask(void *argument)
 {
-  UINT bytesWritten;
-  uint32_t syncCounter = 0;
-  char csvBuffer[128];
-  bool sdAttempted = false;
-  radioQueueHandle = xQueueCreate(1, sizeof(csvBuffer));
+  uint8_t len;
+  bool sdInitialized = DataStore_SDCardInit();
+  // radioQueueHandle = xQueueCreate(1, sizeof(csvBuffer));
 
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     dataStoreTask = true;  // always set flag first — SD ops below must not block WDG
 
-    if (!sdAttempted)
-    {
-      sdAttempted = true;
-      bool cardPresent = (HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin) == GPIO_PIN_RESET);
-      printf("[SD] card detect pin=%d present=%d\r\n",
-             HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
-
-      if (cardPresent)
-      {
-        if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
-        {
-          printf("[SD] mount failed\r\n");
-          sdInitialized = false;
-        }
-        else if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE) != FR_OK)
-        {
-          printf("[SD] open failed\r\n");
-          sdInitialized = false;
-        }
-        else
-        {
-          sdInitialized = true;
-          printf("[SD] ready\r\n");
-          if (f_size(&SDFile) == 0)
-          {
-            char *fileHeaders =
-                "timestamp (ms), flight_state (enum), "
-                "accel_x (centi-mg), accel_y (centi-mg), accel_z (centi-mg), "
-                "gyro_x (centi-dps), gyro_y (centi-dps), gyro_z (centi-dps), "
-                "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
-                "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
-                "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
-                "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg)"
-                "\r\n";
-            f_puts(fileHeaders, &SDFile);
-          }
-        }
-      }
-      else
-      {
-        printf("[SD] no card detected, skipping SD\r\n");
-        sdInitialized = false;
-      }
+    if (!sdInitialized) {
       continue;
     }
 
-    if (!sdInitialized)
-    {
-      continue;
-    }
+    DataStore_TelemetrySnapshot();
+    len = DataStore_WriteToCSV();
 
-    // NOTE: UNCOMMENT WHEN FLYING THE ROCKET
-
-    // if (Rocket.flightState == STATE_PAD)
-    // {
-    //   dataStoreTask = true;
-    //   continue;
-    // }
-
-    taskENTER_CRITICAL();
-    memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
-    memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
-    memcpy(Rocket.snapshot.mag, Rocket.rawData.mag, sizeof(Rocket.snapshot.mag));
-    memcpy(Rocket.snapshot.rpy, Rocket.estimate.rpy, sizeof(Rocket.snapshot.rpy));
-    taskEXIT_CRITICAL();
-
-    Rocket.snapshot.pressure = Rocket.rawData.pressure;
-    Rocket.snapshot.position = Rocket.estimate.position;
-    Rocket.snapshot.velocity = Rocket.estimate.velocity;
-    Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
-    Rocket.snapshot.rollError = Rocket.control.rollError;
-    Rocket.snapshot.pwmAngle = Rocket.control.pwmAngle;
-    Rocket.snapshot.pitchError = Rocket.control.pitchError;
-    Rocket.snapshot.flightState = Rocket.flightState;
-    Rocket.snapshot.timestamp = osKernelGetTickCount();
-
-    // Now format the snapshot into CSV
-    int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
-    len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", Rocket.snapshot.flightState);
-
-#define APPEND_SCALED(value) \
-  len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)((value) * 100))
-    APPEND_SCALED(Rocket.snapshot.accel[0]);
-    APPEND_SCALED(Rocket.snapshot.accel[1]);
-    APPEND_SCALED(Rocket.snapshot.accel[2]);
-    APPEND_SCALED(Rocket.snapshot.gyro[0]);
-    APPEND_SCALED(Rocket.snapshot.gyro[1]);
-    APPEND_SCALED(Rocket.snapshot.gyro[2]);
-    APPEND_SCALED(Rocket.snapshot.mag[0]);
-    APPEND_SCALED(Rocket.snapshot.mag[1]);
-    APPEND_SCALED(Rocket.snapshot.mag[2]);
-    APPEND_SCALED(Rocket.snapshot.rpy[0]);
-    APPEND_SCALED(Rocket.snapshot.rpy[1]);
-    APPEND_SCALED(Rocket.snapshot.rpy[2]);
-    APPEND_SCALED(Rocket.snapshot.tiltAngle);
-    APPEND_SCALED(Rocket.snapshot.position);
-    APPEND_SCALED(Rocket.snapshot.velocity);
-    APPEND_SCALED(Rocket.snapshot.rollError);
-    APPEND_SCALED(Rocket.snapshot.pitchError);
-    APPEND_SCALED(Rocket.snapshot.pwmAngle);
-
-    len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
-
-#undef APPEND_SCALED
-
-    if (len <= 0 || len >= (int)sizeof(csvBuffer))
-    {
-      dataStoreTask = true;
-      continue;
-    }
-
-    if (f_write(&SDFile, csvBuffer, (UINT)len, &bytesWritten) != FR_OK || bytesWritten != (UINT)len)
-    {
-      dataStoreTask = true;
-      continue;
-    }
-
-    if (++syncCounter >= 50)
-    {
-      f_sync(&SDFile);
-      syncCounter = 0;
-    }
-
-    // write queue to send data to vRadioTask
-    xQueueSend(radioQueueHandle, csvBuffer, 0);
-
-    // xTaskNotifyGive(radioTaskHandle);
-    dataStoreTask = true;
+    DataStore_WriteToSDCard(len);
   }
 }
 
