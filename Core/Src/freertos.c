@@ -28,6 +28,7 @@
 // #include "Utils/i2c_scanner.h"
 #include "queue.h"
 #include <string.h>
+#include "rfm69.h"
 #include "Tasks/sensor.h" 
 #include "Tasks/sdcard.h"
 
@@ -50,7 +51,7 @@ osThreadId_t oriEstTaskHandle;
 osThreadId_t launchDetTaskHandle;
 osThreadId_t dataStoreTaskHandle;
 osThreadId_t gpsRetrieveTaskHandle;
-// osThreadId_t radioTaskHandle;
+osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
 
@@ -82,8 +83,8 @@ const osThreadAttr_t controlTask_attributes = {
     .name = "controlCanards", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
-// const osThreadAttr_t radiotask_attributes = {
-//     .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
+const osThreadAttr_t radiotask_attributes = {
+    .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
 
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
@@ -91,7 +92,7 @@ void vOriEstTask(void *argument);
 void vLaunchDetTask(void *argument);
 void vDataStoreTask(void *argument);
 void vControlTask(void *argument);
-// void vRadioTask(void *argument);
+void vRadioTask(void *argument);
 void vHeartbeatTask(void *argument);
 void MX_FREERTOS_Init(void);
 
@@ -117,7 +118,7 @@ void MX_FREERTOS_Init(void)
   launchDetTaskHandle  = osThreadNew(vLaunchDetTask,  NULL, &launchDetTask_attributes);
   dataStoreTaskHandle  = osThreadNew(vDataStoreTask,  NULL, &dataStoreTask_attributes);
   controlTaskHandle    = osThreadNew(vControlTask,    NULL, &controlTask_attributes);
-  // radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
+  radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
   heartbeatTaskHandle  = osThreadNew(vHeartbeatTask,  NULL, &heartbeat_attributes);
 
   printf("[INIT] tasks: r=%p a=%p o=%p l=%p d=%p c=%p h=%p\r\n",
@@ -134,7 +135,7 @@ void vReadSensorTask(void *argument)
   for (;;)
   {
     // I2C1: Magnetometer
-    sensor_ReadMagnetometer();
+    // sensor_ReadMagnetometer();
     
     // SPI2: Barometer
     sensor_ReadBarometer();
@@ -153,7 +154,7 @@ void vReadSensorTask(void *argument)
     HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
 
     readSensorTask = true;
-    osDelay(16);
+    osDelay(500);
   }
 }
 
@@ -372,7 +373,7 @@ void vDataStoreTask(void *argument)
 {
   uint8_t len;
   bool sdInitialized = DataStore_SDCardInit();
-  // radioQueueHandle = xQueueCreate(1, sizeof(csvBuffer));
+  radioQueueHandle = xQueueCreate(1, 128); // 128 is the size of csvBuffer
 
   for (;;)
   {
@@ -387,6 +388,7 @@ void vDataStoreTask(void *argument)
     len = DataStore_WriteToCSV();
 
     DataStore_WriteToSDCard(len);
+    send_to_radio();
   }
 }
 
@@ -484,34 +486,48 @@ void vHeartbeatTask(void *argument)
   }
 }
 
-// void vRadioTask(void *argument)
-// {
-//   char csvBufferReceived[128];
-//   char sendingBuffer[128];
-//   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//   // i2cScanner();
+void vRadioTask(void *argument)
+{ 
+  HAL_StatusTypeDef radioInitialized = rfm69Init();     
+  char csvBufferReceived[128];
+  char sendingBuffer[128];
+  memset(sendingBuffer, 0, sizeof(sendingBuffer));
+  uint8_t payloadSize = 50;
+  uint8_t remainingDataSize;
 
-//   for (;;)
-//   {
-//     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-//     if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
-//     {
-//       if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-//       {
-//         strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
-//         sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t *)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
-//         {
-//           printf("I2C transmission 1 to ESP32 failed\r\n");
-//         }
-//         memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//       }
-//       xSemaphoreGive(gI2c1Mutex);
-//     }
+  for (;;)
+  {
+    if (radioInitialized != HAL_OK)
+    {
+      radioInitialized = rfm69Init();
+      continue;
+    }
 
-//     radioTask = true;
-//   }
-// }
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
+    {
+      strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
+      sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
+
+      if (rfm69Transmit((uint8_t *)sendingBuffer, payloadSize) != HAL_OK)
+      {
+        while(1); // FOR DEBUGGING
+        printf("RFM69 transmission failed\r\n");
+      }
+
+      osDelay(1);
+      remainingDataSize = strlen(sendingBuffer) - payloadSize;
+      if (remainingDataSize > 0 &&rfm69Transmit((uint8_t *)sendingBuffer + payloadSize, remainingDataSize + 1) != HAL_OK)
+      {
+        while(1); // FOR DEBUGGING
+        printf("RFM69 transmission failed\r\n");
+      }
+      memset(sendingBuffer, 0, sizeof(sendingBuffer));
+    }
+
+    radioTask = true;
+  }
+}
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {

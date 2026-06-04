@@ -14,8 +14,8 @@ extern FIL SDFile;
 extern char SDPath[4];
 extern SD_HandleTypeDef hsd;
 extern bool dataStoreTask;
-// extern QueueHandle_t radioQueueHandle;
-// extern TaskHandle_t radioTaskHandle;
+extern QueueHandle_t radioQueueHandle;
+extern TaskHandle_t radioTaskHandle;
 extern Rocket_States_t Rocket;
 
 static bool sdInitialized = false;
@@ -156,18 +156,16 @@ void DataStore_WriteToSDCard(int len){
         f_sync(&SDFile);
         syncCounter = 0;
     }
-
-    // write queue to send data to vRadioTask
-    // xQueueSend(radioQueueHandle, csvBuffer, 0);
-
-    dataStoreTask = true;
-    // xTaskNotifyGive(radioTaskHandle);
-
 }
 
+void send_to_radio()
+{
+    // write queue to send data to vRadioTask
+    xQueueSend(radioQueueHandle, csvBuffer, 0);
 
-
-
+    dataStoreTask = true;
+    xTaskNotifyGive(radioTaskHandle);
+}
 
 
 

@@ -7,7 +7,7 @@
 #define RESET_PIN GPIO_PIN_4
 
 #define SYNC_VALUE_1 0x2D
-#define SYNC_VALUE_2 0x64
+#define SYNC_VALUE_2 0xAA
 
 extern SemaphoreHandle_t gSpi1Mutex;
 

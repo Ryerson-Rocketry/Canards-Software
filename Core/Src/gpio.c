@@ -53,8 +53,9 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GNSS_GPIO_Pin | SPI2_CS_2_Pin | RADIO_G0_Pin | Servo_HS_Sw_Pin | Radio_EN_Pin | RADIO_RST_Pin | Radio_RST_Pin | RX_LED_GP_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GNSS_GPIO_Pin | SPI2_CS_2_Pin | RADIO_G0_Pin | Servo_HS_Sw_Pin  | RADIO_RST_Pin | Radio_RST_Pin | RX_LED_GP_Pin, GPIO_PIN_RESET);
 
+  HAL_GPIO_WritePin(GPIOC, Radio_EN_Pin, GPIO_PIN_SET);
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, Radio_D5_Pin | Radio_D4_Pin | GPIO_1_Pin | GPIO_2_Pin | SDIO_NCD_Pin, GPIO_PIN_RESET);
 
@@ -83,13 +84,20 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Radio_D5_Pin Radio_D4_Pin SPI1_CS_3_Pin GPIO_1_Pin
+  /*Configure GPIO pins : Radio_D5_Pin Radio_D4_Pin GPIO_1_Pin
                            GPIO_2_Pin SDIO_NCD_Pin */
-  GPIO_InitStruct.Pin = Radio_D5_Pin | Radio_D4_Pin | SPI1_CS_3_Pin | GPIO_1_Pin | GPIO_2_Pin | SDIO_NCD_Pin;
+  GPIO_InitStruct.Pin = Radio_D5_Pin | Radio_D4_Pin | GPIO_1_Pin | GPIO_2_Pin | SDIO_NCD_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : SPI1_CS_3_Pin */
+  GPIO_InitStruct.Pin = SPI1_CS_3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(SPI1_CS_3_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : SPI1_CS_Pin */
   GPIO_InitStruct.Pin = SPI1_CS_Pin;
