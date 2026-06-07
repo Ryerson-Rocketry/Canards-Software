@@ -80,6 +80,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Utils/i2c_scanner.c
     Core/Src/Tasks/sensor.c
     Core/Src/Tasks/sdcard.c
+    Core/Src/Tasks/LaunchDet.c
 )
 
 # Add include paths

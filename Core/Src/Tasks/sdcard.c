@@ -150,7 +150,6 @@ void DataStore_WriteToSDCard(int len){
         dataStoreTask = true;
     }
 
-    // can be shortened?
     if (++syncCounter >= 50)
     {
         f_sync(&SDFile);
