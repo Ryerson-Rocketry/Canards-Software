@@ -3,11 +3,11 @@
 #include "semphr.h"
 #include "main.h"
 
-#define RESET_PORT GPIOA
-#define RESET_PIN GPIO_PIN_4
+#define RESET_PORT GPIOC
+#define RESET_PIN GPIO_PIN_5
 
 #define SYNC_VALUE_1 0x2D
-#define SYNC_VALUE_2 0xAA
+#define SYNC_VALUE_2 0xD4
 
 extern SemaphoreHandle_t gSpi1Mutex;
 

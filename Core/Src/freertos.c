@@ -135,7 +135,7 @@ void vReadSensorTask(void *argument)
   for (;;)
   {
     // I2C1: Magnetometer
-    // sensor_ReadMagnetometer();
+    sensor_ReadMagnetometer();
     
     // SPI2: Barometer
     sensor_ReadBarometer();
@@ -154,7 +154,7 @@ void vReadSensorTask(void *argument)
     HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
 
     readSensorTask = true;
-    osDelay(500);
+    osDelay(20);
   }
 }
 
@@ -487,43 +487,29 @@ void vHeartbeatTask(void *argument)
 }
 
 void vRadioTask(void *argument)
-{ 
-  HAL_StatusTypeDef radioInitialized = rfm69Init();     
-  char csvBufferReceived[128];
+{
+  char csvBufferReceived[128]; 
   char sendingBuffer[128];
   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-  uint8_t payloadSize = 50;
-  uint8_t remainingDataSize;
+  // i2cScanner(); 
 
   for (;;)
   {
-    if (radioInitialized != HAL_OK)
-    {
-      radioInitialized = rfm69Init();
-      continue;
-    }
-
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
-    {
-      strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
-      sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-
-      if (rfm69Transmit((uint8_t *)sendingBuffer, payloadSize) != HAL_OK)
+    if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS) 
+    { 
+      if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
       {
-        while(1); // FOR DEBUGGING
-        printf("RFM69 transmission failed\r\n");
+        strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
+        sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
+        if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+        {
+          printf("I2C transmission 1 to ESP32 failed\r\n");
+        } 
+        memset(sendingBuffer, 0, sizeof(sendingBuffer));
       }
-
-      osDelay(1);
-      remainingDataSize = strlen(sendingBuffer) - payloadSize;
-      if (remainingDataSize > 0 &&rfm69Transmit((uint8_t *)sendingBuffer + payloadSize, remainingDataSize + 1) != HAL_OK)
-      {
-        while(1); // FOR DEBUGGING
-        printf("RFM69 transmission failed\r\n");
-      }
-      memset(sendingBuffer, 0, sizeof(sendingBuffer));
-    }
+      xSemaphoreGive(gI2c1Mutex);
+    }    
 
     radioTask = true;
   }

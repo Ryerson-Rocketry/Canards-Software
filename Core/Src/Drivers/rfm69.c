@@ -54,7 +54,6 @@ HAL_StatusTypeDef rfm69Write(uint8_t reg, uint8_t val)
 
     if (xSemaphoreTake(gSpi1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-
         // SPI1_Switch_Settings(SPI_BAUDRATEPRESCALER_8,
         //                      SPI_POLARITY_LOW, // CPOL=0
         //                      SPI_PHASE_1EDGE);
@@ -203,16 +202,8 @@ HAL_StatusTypeDef rfm69SetTxPower(int8_t power_dbm)
 HAL_StatusTypeDef rfm69SyncWords(uint8_t syncWord1, uint8_t syncWord2)
 {
     HAL_StatusTypeDef status;
-    uint8_t syncConfigVal;
 
-    status = rfm69Read(REG_SYNCCONFIG, &syncConfigVal, 1);
-
-    if (status != HAL_OK)
-    {
-        return status;
-    }
-
-    status = rfm69Write(REG_SYNCCONFIG, syncConfigVal | 0x88);
+    status = rfm69Write(REG_SYNCCONFIG, 0x88);
 
     if (status != HAL_OK)
     {
@@ -389,7 +380,7 @@ HAL_StatusTypeDef rfm69Transmit(uint8_t *data, uint8_t len)
     HAL_StatusTypeDef status;
     //////////////////////////////////////////////////////////////
     static uint8_t packet_id = 0;
-    uint8_t rh_header[4] = { 10, 5, packet_id++, 0x00 };
+    uint8_t rh_header[4] = { 0,255, packet_id++, 0x00 };
 ////////////////////////////////////////////////////////////////////////////////
     // 1. Go to standby and wait until settled
     status = rfm69SwitchModes(STANDBY);
@@ -439,7 +430,7 @@ HAL_StatusTypeDef rfm69Transmit(uint8_t *data, uint8_t len)
             return HAL_TIMEOUT;
         }
 
-        osDelay(1);3
+        osDelay(1);
     } while (!(irqFlags & RF_IRQFLAGS2_PACKETSENT));
 
     // 6. Return to standby when done
