@@ -81,6 +81,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Tasks/sensor.c
     Core/Src/Tasks/sdcard.c
     Core/Src/Tasks/LaunchDet.c
+    Core/Src/Tasks/gps.c
 )
 
 # Add include paths

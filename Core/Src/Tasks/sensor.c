@@ -14,6 +14,7 @@
 extern SPI_HandleTypeDef hspi1;
 extern SemaphoreHandle_t gSpi1Mutex;
 extern SemaphoreHandle_t gSpi2Mutex;
+extern SemaphoreHandle_t gI2c1Mutex;
 extern SemaphoreHandle_t xMagDataReadySemaphore;
 extern SemaphoreHandle_t xImuAccelReadySemaphore;
 extern SemaphoreHandle_t xImuGyroReadySemaphore;
@@ -42,7 +43,10 @@ void sensor_HardwareInit()
 
 // I2C1: Magnetometer
 void sensor_ReadMagnetometer(void){
-    magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
+    if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
+    
+    xSemaphoreGive(gI2c1Mutex);
 }
     
 // SPI2: Barometer

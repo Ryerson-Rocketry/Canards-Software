@@ -4,6 +4,7 @@
 #include "StateEstimation/altitude_estimation.h"
 #include "Utils/math_utils.h"
 #include "Defs/states.h"
+#include "cmsis_os2.h"
 #include "projdefs.h"
 #include "stm32f4xx_hal_def.h"
 #include "task.h"
@@ -32,6 +33,7 @@
 #include "Tasks/sensor.h" 
 #include "Tasks/sdcard.h"
 #include "Tasks/launchDet.h"
+// #include "Tasks/gps.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -55,6 +57,8 @@ osThreadId_t gpsRetrieveTaskHandle;
 osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
+// osThreadId_t gpsTaskHandle;
+
 
 QueueHandle_t radioQueueHandle;
 
@@ -69,6 +73,7 @@ volatile bool dataStoreTask = false;
 volatile bool radioTask = false;
 volatile bool controlTask = false;
 volatile bool oriEstTask = false;
+// volatile bool gpsTask = false;
 
 const osThreadAttr_t readSensorTask_attributes = {
     .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal6};
@@ -86,7 +91,10 @@ const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
 const osThreadAttr_t radiotask_attributes = {
     .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
+// const osThreadAttr_t gps_attributes = {
+//     .name = "gpsTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
 
+// void vGpsTask(void *argument);
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
 void vOriEstTask(void *argument);
@@ -120,6 +128,7 @@ void MX_FREERTOS_Init(void)
   dataStoreTaskHandle  = osThreadNew(vDataStoreTask,  NULL, &dataStoreTask_attributes);
   controlTaskHandle    = osThreadNew(vControlTask,    NULL, &controlTask_attributes);
   radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
+  // gpsTaskHandle        = osThreadNew(vGpsTask, NULL, &gps_attributes);
   heartbeatTaskHandle  = osThreadNew(vHeartbeatTask,  NULL, &heartbeat_attributes);
 
   printf("[INIT] tasks: r=%p a=%p o=%p l=%p d=%p c=%p h=%p\r\n",
@@ -129,10 +138,28 @@ void MX_FREERTOS_Init(void)
   if (!dataStoreTaskHandle)  printf("[INIT] ERROR: dataStoreTask not created (heap?)\r\n");
 }
 
+
+// void vGpsTask(void *argument)
+// {
+//   uint8_t dummy_tx[128];
+//   memset(dummy_tx, 0xFF, sizeof(dummy_tx));
+//   uint8_t gpsData[128];
+//   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+
+
+//   for (;;)
+//   {
+//     int response = gnss_send_mon_ver();
+//     gpsRead(gSpi2Mutex, gpsData, dummy_tx);
+    
+//     gpsTask = true;
+//   }
+// }
+
 void vReadSensorTask(void *argument)
 {
   sensor_HardwareInit();
-
+  
   for (;;)
   {
     // I2C1: Magnetometer
@@ -414,6 +441,7 @@ void vRadioTask(void *argument)
         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
         {
           printf("I2C transmission 1 to ESP32 failed\r\n");
+          while(1);
         } 
         memset(sendingBuffer, 0, sizeof(sendingBuffer));
       }
