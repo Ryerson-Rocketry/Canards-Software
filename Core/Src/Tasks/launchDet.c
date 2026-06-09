@@ -17,7 +17,6 @@ extern bool readSensorTask;
 extern bool altEstTask;
 extern bool launchDetTask;
 extern bool dataStoreTask;
-extern bool radioTask;
 extern bool controlTask;
 extern bool oriEstTask;
 
@@ -123,7 +122,6 @@ void satisfyWDG(){
     altEstTask = true;
     oriEstTask = true;
     dataStoreTask = true;
-    radioTask = true;
     controlTask = true;
   }
 

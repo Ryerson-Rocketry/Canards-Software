@@ -163,7 +163,6 @@ void send_to_radio()
     xQueueSend(radioQueueHandle, csvBuffer, 0);
 
     dataStoreTask = true;
-    xTaskNotifyGive(radioTaskHandle);
 }
 
 
