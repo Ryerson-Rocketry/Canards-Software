@@ -160,7 +160,10 @@ void DataStore_WriteToSDCard(int len){
 void send_to_radio()
 {
     // write queue to send data to vRadioTask
-    xQueueSend(radioQueueHandle, csvBuffer, 0);
+    if (xQueueSend(radioQueueHandle, csvBuffer, 0) == pdPASS)
+    {
+        xTaskNotifyGive(radioTaskHandle);
+    }
 
     dataStoreTask = true;
 }
