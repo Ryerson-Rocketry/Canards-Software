@@ -90,10 +90,10 @@ const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
 const osThreadAttr_t radiotask_attributes = {
     .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
-// const osThreadAttr_t gps_attributes = {
-//     .name = "gpsTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
+const osThreadAttr_t gps_attributes = {
+    .name = "gpsTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
 
-// void vGpsTask(void *argument);
+void vGpsTask(void *argument);
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
 void vOriEstTask(void *argument);
@@ -127,7 +127,7 @@ void MX_FREERTOS_Init(void)
   dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
   controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
   radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
-  // gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
+  gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
   heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
 
   printf("[INIT] tasks: r=%p a=%p o=%p l=%p d=%p c=%p h=%p\r\n",
@@ -138,53 +138,56 @@ void MX_FREERTOS_Init(void)
     printf("[INIT] ERROR: dataStoreTask not created (heap?)\r\n");
 }
 
-// void vGpsTask(void *argument)
-// {
-//   uint8_t dummy_tx[512];
-//   memset(dummy_tx, 0xFF, sizeof(dummy_tx));
-//   char gpsData[512];
+void vGpsTask(void *argument)
+{
+  uint8_t dummy_tx[512];
+  memset(dummy_tx, 0xFF, sizeof(dummy_tx));
+  char gpsData[512];
 
-//   GNSS_Data vehicle_gps;
-//   memset(&vehicle_gps, 0, sizeof(GNSS_Data));
+  GNSS_Data vehicle_gps;
+  memset(&vehicle_gps, 0, sizeof(GNSS_Data));
 
-//   CS_HIGH();
-//   vTaskDelay(pdMS_TO_TICKS(1500));
+  CS_HIGH();
+  vTaskDelay(pdMS_TO_TICKS(1500));
 
-//   // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
-//   // vTaskDelay(pdMS_TO_TICKS(500));
-//   // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
-//   // vTaskDelay(pdMS_TO_TICKS(500));
+  // only used for setting up the gps
+  // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
+  // vTaskDelay(pdMS_TO_TICKS(500));
+  // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
+  // vTaskDelay(pdMS_TO_TICKS(500));
 
-//   for (;;)
-//   {
-//     // gpsRead(gSpi2Mutex, gpsData, dummy_tx);
+  for (;;)
+  {
+    gpsRead(gSpi2Mutex, gpsData, dummy_tx);
 
-//     // printf(gpsData);
-//     // const char single_stream_burst[] = 
-//     // "$GNRMC,204520.00,A,5109.0262239,N,11401.8407338,W,0.004,102.3,130522,0.0,E,D*3B\r\n"
-//     // "$GPVTG,360.0,T,348.7,M,005.5,N,010.2,K,A*39\r\n"
-//     // "$GPGGA,072446.00,3130.5226316,N,12024.0937010,E,4,27,0.5,31.924,M,0.000,M,2.0,*44\r\n"
-//     // "$GNGSA,A,3,04,06,07,09,11,16,20,30,,,,,0.98,0.49,0.85,1*0A\r\n";
+    printf(gpsData);
+    
+    // ONLY FOR DEBUGGING, uses fake nmea sentences //
+    const char single_stream_burst[] = 
+    "$GNRMC,204520.00,A,5109.0262239,N,11401.8407338,W,0.004,102.3,130522,0.0,E,D*3B\r\n"
+    "$GPVTG,360.0,T,348.7,M,005.5,N,010.2,K,A*39\r\n"
+    "$GPGGA,072446.00,3130.5226316,N,12024.0937010,E,4,27,0.5,31.924,M,0.000,M,2.0,*44\r\n"
+    "$GNGSA,A,3,04,06,07,09,11,16,20,30,,,,,0.98,0.49,0.85,1*0A\r\n";
+    strcpy(gpsData, single_stream_burst);
+    // ONLY FOR DEBUGGING //
 
-//     // strcpy(gpsData, single_stream_burst);
+    process_gps_data(gpsData, &vehicle_gps);
 
-//     // process_gps_data(gpsData, &vehicle_gps);
+    if (vehicle_gps.has_fix) {
+        printf("==== TELEMETRY REPORT ====\n");
+        printf("Timestamp:  %s  |  Date: %s\n", vehicle_gps.utc_time, vehicle_gps.date);
+        printf("Position:   %.6f N, %.6f W\n", vehicle_gps.latitude, vehicle_gps.longitude);
+        printf("Altitude:   %.1f meters\n", vehicle_gps.altitude_m);
+        printf("Speed:      %.2f km/h (Vector Heading: %.1f deg)\n", vehicle_gps.speed_kmh, vehicle_gps.heading_true);
+        printf("Satellites: %d active channel locks\n", vehicle_gps.satellites_tracked);
+        printf("Precision:  HDOP: %.1f | VDOP: %.1f\n", vehicle_gps.hdop, vehicle_gps.vdop);
+    } else {
+        printf("No Global Position Lock Found Yet.\n");
+    }
 
-//     // if (vehicle_gps.has_fix) {
-//     //     printf("==== TELEMETRY REPORT ====\n");
-//     //     printf("Timestamp:  %s  |  Date: %s\n", vehicle_gps.utc_time, vehicle_gps.date);
-//     //     printf("Position:   %.6f N, %.6f W\n", vehicle_gps.latitude, vehicle_gps.longitude);
-//     //     printf("Altitude:   %.1f meters\n", vehicle_gps.altitude_m);
-//     //     printf("Speed:      %.2f km/h (Vector Heading: %.1f deg)\n", vehicle_gps.speed_kmh, vehicle_gps.heading_true);
-//     //     printf("Satellites: %d active channel locks\n", vehicle_gps.satellites_tracked);
-//     //     printf("Precision:  HDOP: %.1f | VDOP: %.1f\n", vehicle_gps.hdop, vehicle_gps.vdop);
-//     // } else {
-//     //     printf("No Global Position Lock Found Yet.\n");
-//     // }
-
-//     gpsTask = true;
-//   }
-// }
+    gpsTask = true;
+  }
+}
 
 void vReadSensorTask(void *argument)
 {
