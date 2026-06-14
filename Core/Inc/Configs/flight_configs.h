@@ -1,16 +1,30 @@
 #pragma once
+
+// ─── Magnetometer Calibration ─────────────────────────────────────────────────
 #define MAG_X_OFFSET 0.077f
 #define MAG_Y_OFFSET 0.147f
-#define SEA_LEVEL_PA 101325.0f // Standard atmospheric pressure
+
+// ─── Atmospheric Constants ────────────────────────────────────────────────────
+#define SEA_LEVEL_PA 101325.0f // Standard atmospheric pressure (Pa)
 #define PI 3.14159265358979323846f
+
+// ─── GPS ──────────────────────────────────────────────────────────────────────
 #define GPS_BUF_SIZE 128
+
+// ─── Logging ──────────────────────────────────────────────────────────────────
 #define FLIGHT_DATA_FILE_NAME "LOG.CSV"
-#define Kp 0.45
-#define Ki 0
-#define Kd 0.19
-#define MOMENT_ARM 0.07383f
-#define SERVO_MIN_US 830
-#define SERVO_MAX_US 2210
-#define SERVO_CENTER_US 1520
-#define SERVO_US_PER_DEG 7.67f
-#define ESP32_I2C_ADDRESS 48 // 0x30 in hexadecimal
+
+// ─── PID Gains ────────────────────────────────────────────────────────────────
+#define Kp 0.45f
+#define Ki 0.0f
+#define Kd 0.19f
+
+// ─── Servo Configuration ──────────────────────────────────────────────────────
+#define MOMENT_ARM 0.07383f    // meters
+#define SERVO_MIN_US 1000      // Minimum pulse width (µs)
+#define SERVO_MAX_US 2000      // Maximum pulse width (µs)
+#define SERVO_CENTER_US 1500   // Neutral pulse width (µs)
+#define SERVO_US_PER_DEG 10.0f // Pulse width change per degree
+
+// ─── I2C ──────────────────────────────────────────────────────────────────────
+#define ESP32_I2C_ADDRESS 0x30 // 48 decimal

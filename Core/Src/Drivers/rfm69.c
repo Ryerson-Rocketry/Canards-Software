@@ -27,11 +27,6 @@ HAL_StatusTypeDef rfm69Read(uint8_t reg, uint8_t *buf, int len)
 
     if (xSemaphoreTake(gSpi1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-
-        SPI1_Switch_Settings(SPI_BAUDRATEPRESCALER_8,
-                             SPI_POLARITY_LOW, // CPOL=0
-                             SPI_PHASE_1EDGE);
-
         CS_LOW();
 
         status = HAL_SPI_Transmit(&hspi1, &reg, 1, HAL_MAX_DELAY);
@@ -59,10 +54,9 @@ HAL_StatusTypeDef rfm69Write(uint8_t reg, uint8_t val)
 
     if (xSemaphoreTake(gSpi1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-
-        SPI1_Switch_Settings(SPI_BAUDRATEPRESCALER_8,
-                             SPI_POLARITY_LOW, // CPOL=0
-                             SPI_PHASE_1EDGE);
+        // SPI1_Switch_Settings(SPI_BAUDRATEPRESCALER_8,
+        //                      SPI_POLARITY_LOW, // CPOL=0
+        //                      SPI_PHASE_1EDGE);
 
         CS_LOW();
         status = HAL_SPI_Transmit(&hspi1, writePayload, 2, HAL_MAX_DELAY);
@@ -76,10 +70,10 @@ HAL_StatusTypeDef rfm69Write(uint8_t reg, uint8_t val)
 
 void rfm69ManualReset()
 {
-    HAL_GPIO_WritePin(RESET_PORT, RESET_PIN, GPIO_PIN_SET);
-    osDelay(pdMS_TO_TICKS(10));
-    HAL_GPIO_WritePin(RESET_PORT, RESET_PIN, GPIO_PIN_RESET);
-    osDelay(pdMS_TO_TICKS(50));
+    HAL_GPIO_WritePin(RADIO_RST_PORT, RADIO_RST_PIN, GPIO_PIN_SET);
+    osDelay(10);
+    HAL_GPIO_WritePin(RADIO_RST_PORT, RADIO_RST_PIN, GPIO_PIN_RESET);
+    osDelay(50);
 }
 
 HAL_StatusTypeDef rfm69SwitchModes(uint8_t mode)
@@ -90,9 +84,7 @@ HAL_StatusTypeDef rfm69SwitchModes(uint8_t mode)
     status = rfm69Read(REG_OPMODE, &currentOpMode, 1);
 
     if (status != HAL_OK)
-    {
         return status;
-    }
 
     // clear current mode
     currentOpMode &= ~0x1C;
@@ -188,21 +180,21 @@ HAL_StatusTypeDef rfm69SetBand(RFM69_Band band)
 HAL_StatusTypeDef rfm69SetTxPower(int8_t power_dbm)
 {
     // 1. Clamp the input to the physical limits of the PA1 formula
-    if (power_dbm < -18)
-        power_dbm = -18;
+    if (power_dbm < -2)
+        power_dbm = -2;
     if (power_dbm > 13)
         power_dbm = 13;
 
     // 2. Calculate OutputPower (Bits 4-0)
     // Formula: Pout = -18 + OutputPower => OutputPower = Pout + 18
-    uint8_t outputPowerVal = (uint8_t)(power_dbm + 18);
+    uint8_t outputPowerVal = (uint8_t)(power_dbm + 14);
 
     // 3. Construct the register byte:
     // Bit 7: Pa0On = 0 (Off)
     // Bit 6: Pa1On = 1 (On, connected to PA_BOOST for HCW)
     // Bit 5: Pa2On = 0 (Off)
     // Bits 4-0: OutputPower
-    uint8_t regVal = 0x40 | (outputPowerVal & 0x1F);
+    uint8_t regVal = 0x60 | (outputPowerVal & 0x1F);
 
     return rfm69Write(REG_PALEVEL, regVal);
 }
@@ -210,16 +202,8 @@ HAL_StatusTypeDef rfm69SetTxPower(int8_t power_dbm)
 HAL_StatusTypeDef rfm69SyncWords(uint8_t syncWord1, uint8_t syncWord2)
 {
     HAL_StatusTypeDef status;
-    uint8_t syncConfigVal;
 
-    status = rfm69Read(REG_SYNCCONFIG, &syncConfigVal, 1);
-
-    if (status != HAL_OK)
-    {
-        return status;
-    }
-
-    status = rfm69Write(REG_SYNCCONFIG, syncConfigVal | 0x88);
+    status = rfm69Write(REG_SYNCCONFIG, 0x88);
 
     if (status != HAL_OK)
     {
@@ -289,7 +273,7 @@ HAL_StatusTypeDef rfm69ConfigPacketHandler()
         return status;
     }
 
-    status = rfm69Write(REG_PAYLOADLENGTH, 66);
+    status = rfm69Write(REG_PAYLOADLENGTH, 64); ///////// CHANGED
 
     return status;
 }
@@ -308,52 +292,80 @@ HAL_StatusTypeDef rfm69Init()
 
     // 2. switch to standby mode
     status = rfm69SwitchModes(STANDBY);
-
     if (status != HAL_OK)
-    {
         return status;
-    }
 
     // 3. set data modulation
-    status = rfm69SetDataMod(0x00);
-
+    status = rfm69SetDataMod(0x00); 
     if (status != HAL_OK)
-    {
         return status;
-    }
 
     // 4. set bitrate
     status = rfm69SetBitrate(RFM69_BITRATE_250KBPS);
-
     if (status != HAL_OK)
-    {
         return status;
-    }
 
     // 5. set frequency
     status = rfm69SetBand(RFM69_BAND_433MHZ);
-
     if (status != HAL_OK)
-    {
         return status;
-    }
 
     // 6. turn on transmitter power
     status = rfm69SetTxPower(13);
     if (status != HAL_OK)
-    {
-
         return status;
-    }
+//////////////////////////////////////////////////////////////////////////////////
+    // 6a. HCW-specific TX setup
+    status = rfm69Write(REG_OCP, 0x0F);
+    if (status != HAL_OK)
+        return status;
 
+    status = rfm69Write(REG_LNA, 0x88);
+    if (status != HAL_OK)
+        return status;
+
+    status = rfm69Write(REG_RXBW, 0xE0);
+    if (status != HAL_OK)
+        return status;
+
+    status = rfm69Write(REG_FIFOTHRESH, 0x8F);
+    if (status != HAL_OK)
+        return status;
+
+    status = rfm69Write(REG_TESTPA1, 0x5D);
+    if (status != HAL_OK)
+        return status;
+
+    status = rfm69Write(REG_TESTPA2, 0x7C);
+    if (status != HAL_OK)
+        return status;
+////////////////////////////////////////////////////////////////////////
+
+    status = rfm69Write(REG_FDEVMSB, 0x10);
+    if (status != HAL_OK)
+        return status;
+
+    status = rfm69Write(REG_FDEVLSB, 0x00); 
+    if (status != HAL_OK)
+        return status;
+
+    status = rfm69Write(REG_TESTDAGC, 0x30);
+    if (status != HAL_OK)        
+        return status;
+
+    status = rfm69Write(0x2C, 0x00); // REG_PREAMBLEMSB
+    if (status != HAL_OK)        
+        return status;
+
+    status = rfm69Write(0x2D, 0x04); // REG_PREAMBLELSB (4 bytes)
+    if (status != HAL_OK)        
+        return status;
+
+///////////////////////////////////////////////////////////////
     // 7. setup sync word
     status = rfm69SyncWords(SYNC_VALUE_1, SYNC_VALUE_2);
-
     if (status != HAL_OK)
-    {
-
         return status;
-    }
 
     // 8. Configure Packet Handler
     status = rfm69ConfigPacketHandler();
@@ -366,7 +378,10 @@ HAL_StatusTypeDef rfm69Init()
 HAL_StatusTypeDef rfm69Transmit(uint8_t *data, uint8_t len)
 {
     HAL_StatusTypeDef status;
-
+    //////////////////////////////////////////////////////////////
+    static uint8_t packet_id = 0;
+    uint8_t rh_header[4] = { 0,255, packet_id++, 0x00 };
+////////////////////////////////////////////////////////////////////////////////
     // 1. Go to standby and wait until settled
     status = rfm69SwitchModes(STANDBY);
     if (status != HAL_OK)
@@ -377,10 +392,17 @@ HAL_StatusTypeDef rfm69Transmit(uint8_t *data, uint8_t len)
         return status;
 
     // 2. Write length byte to FIFO
-    status = rfm69Write(REG_FIFO, len);
+    status = rfm69Write(REG_FIFO, len + 4); ///////////// ADDED 4
     if (status != HAL_OK)
         return status;
 
+//////////////////////////////////////////////////////////////
+    // 5. Write the 4 custom RadioHead header bytes consecutively
+    for (int i = 0; i < 4; i++) {
+        status = rfm69Write(REG_FIFO, rh_header[i]);
+        if (status != HAL_OK) return status;
+    }
+///////////////////////////////////////////////////////////////
     // 3. Write payload bytes into FIFO
     for (uint8_t i = 0; i < len; i++)
     {
@@ -394,10 +416,6 @@ HAL_StatusTypeDef rfm69Transmit(uint8_t *data, uint8_t len)
     if (status != HAL_OK)
         return status;
 
-    status = rfm69WaitForModeReady();
-    if (status != HAL_OK)
-        return status;
-
     // 5. Poll PacketSent flag (bit 3 of IRQFLAGS2)
     uint8_t irqFlags = 0;
     uint32_t timeout = HAL_GetTick();
@@ -408,10 +426,12 @@ HAL_StatusTypeDef rfm69Transmit(uint8_t *data, uint8_t len)
         if (status != HAL_OK)
             return status;
 
-        if (HAL_GetTick() - timeout > 500)
+        if (HAL_GetTick() - timeout > 500){
             return HAL_TIMEOUT;
+        }
 
-    } while (!(irqFlags & 0x08));
+        osDelay(1);
+    } while (!(irqFlags & RF_IRQFLAGS2_PACKETSENT));
 
     // 6. Return to standby when done
     return rfm69SwitchModes(STANDBY);

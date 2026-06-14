@@ -4,6 +4,7 @@
 #include "StateEstimation/altitude_estimation.h"
 #include "Utils/math_utils.h"
 #include "Defs/states.h"
+#include "cmsis_os2.h"
 #include "projdefs.h"
 #include "stm32f4xx_hal_def.h"
 #include "task.h"
@@ -28,6 +29,11 @@
 // #include "Utils/i2c_scanner.h"
 #include "queue.h"
 #include <string.h>
+#include "rfm69.h"
+#include "Tasks/sensor.h"
+#include "Tasks/sdcard.h"
+#include "Tasks/launchDet.h"
+#include "Tasks/gps.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -51,6 +57,7 @@ osThreadId_t gpsRetrieveTaskHandle;
 // osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
+osThreadId_t gpsTaskHandle;
 
 QueueHandle_t radioQueueHandle;
 
@@ -62,9 +69,10 @@ volatile bool readSensorTask = false;
 volatile bool altEstTask = false;
 volatile bool launchDetTask = false;
 volatile bool dataStoreTask = false;
-volatile bool radioTask = false;
+// volatile bool radioTask = false;
 volatile bool controlTask = false;
 volatile bool oriEstTask = false;
+volatile bool gpsTask = false;
 
 const osThreadAttr_t readSensorTask_attributes = {
     .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal6};
@@ -82,7 +90,10 @@ const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
 // const osThreadAttr_t radiotask_attributes = {
 //     .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
+const osThreadAttr_t gps_attributes = {
+    .name = "gpsTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
 
+void vGpsTask(void *argument);
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
 void vOriEstTask(void *argument);
@@ -110,99 +121,81 @@ void MX_FREERTOS_Init(void)
   configASSERT(xImuGyroReadySemaphore);
 
   readSensorTaskHandle = osThreadNew(vReadSensorTask, NULL, &readSensorTask_attributes);
-  altEstTaskHandle     = osThreadNew(vAltEstTask,     NULL, &altEstTask_attributes);
-  oriEstTaskHandle     = osThreadNew(vOriEstTask,     NULL, &oriEstTask_attributes);
-  launchDetTaskHandle  = osThreadNew(vLaunchDetTask,  NULL, &launchDetTask_attributes);
-  dataStoreTaskHandle  = osThreadNew(vDataStoreTask,  NULL, &dataStoreTask_attributes);
-  controlTaskHandle    = osThreadNew(vControlTask,    NULL, &controlTask_attributes);
+  altEstTaskHandle = osThreadNew(vAltEstTask, NULL, &altEstTask_attributes);
+  oriEstTaskHandle = osThreadNew(vOriEstTask, NULL, &oriEstTask_attributes);
+  launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
+  dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
+  controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
   // radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
-  heartbeatTaskHandle  = osThreadNew(vHeartbeatTask,  NULL, &heartbeat_attributes);
+  gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
+  heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
 
   printf("[INIT] tasks: r=%p a=%p o=%p l=%p d=%p c=%p h=%p\r\n",
-         (void*)readSensorTaskHandle, (void*)altEstTaskHandle, (void*)oriEstTaskHandle,
-         (void*)launchDetTaskHandle,  (void*)dataStoreTaskHandle, (void*)controlTaskHandle,
-         (void*)heartbeatTaskHandle);
-  if (!dataStoreTaskHandle)  printf("[INIT] ERROR: dataStoreTask not created (heap?)\r\n");
+         (void *)readSensorTaskHandle, (void *)altEstTaskHandle, (void *)oriEstTaskHandle,
+         (void *)launchDetTaskHandle, (void *)dataStoreTaskHandle, (void *)controlTaskHandle,
+         (void *)heartbeatTaskHandle);
+  if (!dataStoreTaskHandle)
+    printf("[INIT] ERROR: dataStoreTask not created (heap?)\r\n");
+}
+
+void vGpsTask(void *argument)
+{
+  static uint8_t dummy_tx[GPS_BUF_SIZE];
+  memset(dummy_tx, 0xFF, sizeof(dummy_tx));
+  uint8_t gpsData[GPS_BUF_SIZE];
+
+  GNSS_Data vehicle_gps;
+  memset(&vehicle_gps, 0, sizeof(GNSS_Data));
+
+  CS_HIGH();
+  vTaskDelay(pdMS_TO_TICKS(1500));
+
+  // only used for setting up the gps
+  // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
+  // vTaskDelay(pdMS_TO_TICKS(500));
+  // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
+  // vTaskDelay(pdMS_TO_TICKS(500));
+
+  for (;;)
+  {
+    gpsRead(gSpi2Mutex, gpsData, dummy_tx);
+    process_gps_data((char *)gpsData, &vehicle_gps);
+
+    taskENTER_CRITICAL();
+    Rocket.gps.has_fix = vehicle_gps.has_fix;
+    Rocket.gps.latitude = vehicle_gps.latitude;
+    Rocket.gps.longitude = vehicle_gps.longitude;
+    Rocket.gps.altitude_m = vehicle_gps.altitude_m;
+    Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
+    taskEXIT_CRITICAL();
+
+    osDelay(200);
+    gpsTask = true;
+  }
 }
 
 void vReadSensorTask(void *argument)
 {
-
-  static float accel_filt[3] = {0.0f, 0.0f, 1000.0f};
-  const float alpha_accel = 0.1f;
-  static float gyro_filt[3] = {0.0f, 0.0f, 0.0f};
-  const float alpha_gyro = 0.2f;
-
-  magInit();
-  LSM6DSO32_Rocket_Init(&hspi1);
-  Barometer_init();
-  osDelay(1000);
-
-  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
-  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
-  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+  sensor_HardwareInit();
 
   for (;;)
   {
     // I2C1: Magnetometer
-    magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
+    sensor_ReadMagnetometer();
 
     // SPI2: Barometer
-    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
-    {
-      int32_t p_mbar_x100 = Barometer_getPressure(true);
-      int32_t t_centiC = Barometer_getTemp(false);
+    sensor_ReadBarometer();
 
-      /* Convert units */
-      Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
-      Rocket.rawData.temperature = t_centiC / 100.0f;
-      xSemaphoreGive(gSpi2Mutex);
-    }
+    // SPI1: IMU - accelerometer
+    sensor_ReadIMUAccelerometer();
 
-    // SPI1: IMU
-    if (xSemaphoreTake(gSpi1Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
-    {
-      if (xSemaphoreTake(xImuAccelReadySemaphore, 0) == pdTRUE)
-      {
-        LSM6DSO32_Read_Accel(Rocket.rawData.accel);
-        for (int i = 0; i < 3; i++)
-        {
-          accel_filt[i] = (alpha_accel * Rocket.rawData.accel[i]) + ((1.0f - alpha_accel) * accel_filt[i]);
-          Rocket.rawData.accel[i] = accel_filt[i];
-        }
-      }
-
-      if (xSemaphoreTake(xImuGyroReadySemaphore, 0) == pdTRUE)
-      {
-        LSM6DSO32_Read_Gyro(Rocket.rawData.gyro);
-        for (int i = 0; i < 3; i++)
-        {
-          // Formula: Smooth Value = (New * Alpha) + (Old * (1 - Alpha))
-          gyro_filt[i] = (alpha_gyro * Rocket.rawData.gyro[i]) + ((1.0f - alpha_gyro) * gyro_filt[i]);
-
-          if (fabsf(gyro_filt[i]) < 0.05f)
-          {
-            Rocket.rawData.gyro[i] = 0.0f;
-          }
-          else
-          {
-            Rocket.rawData.gyro[i] = gyro_filt[i];
-          }
-        }
-      }
-      xSemaphoreGive(gSpi1Mutex);
-    }
+    // SPI1: IMU - gyro
+    sensor_ReadIMUGyro();
 
     Rocket.rawData.timestamp = osKernelGetTickCount();
 
-    static bool groundCaptured = false;
-    if (!groundCaptured && Rocket.flightState == STATE_PAD && Rocket.rawData.pressure > 0.0f)
-    {
-      setGroundPressure(Rocket.rawData.pressure);
-      groundCaptured = true;
-    }
+    sensor_GroundReference();
 
-    xTaskNotifyGive(launchDetTaskHandle);
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
 
@@ -289,7 +282,6 @@ void vOriEstTask(void *argument)
 
   for (;;)
   {
-
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     uint32_t current_tick = osKernelGetTickCount();
@@ -317,252 +309,41 @@ void vOriEstTask(void *argument)
 
 void vLaunchDetTask(void *argument)
 {
-  float accel_z;
-  static uint32_t accel_start_time = 0;
-  static bool threshold_active = false;
-  static uint32_t burnoutStartTime = 0;
-  static bool launch_recorded = false;
-  static uint32_t canardActivationTime = 0;
-
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    uint32_t now = osKernelGetTickCount();
-    accel_z = Rocket.rawData.accel[2] - 1000.0f;
+    checkRecorded();
 
-    if (Rocket.flightState != STATE_PAD && !launch_recorded)
-    {
-      Rocket.estimate.launch_tick = osKernelGetTickCount();
-      launch_recorded = true;
-    }
+    checkFlightState();
 
-    switch (Rocket.flightState)
-    {
-    case STATE_PAD:
-      if (accel_z >= 4000.0f)
-      {
-        if (!threshold_active)
-        {
-          accel_start_time = now;
-          threshold_active = true;
-        }
-        if ((now - accel_start_time) >= pdMS_TO_TICKS(100))
-        {
-          Rocket.flightState = STATE_BOOST;
-          printf("LAUNCH DETECTED at %lu ms\r\n", now);
-        }
-      }
-      else
-      {
-        threshold_active = false;
-      }
-      break;
+    notifyTasks();
 
-    case STATE_BOOST:
-      if ((now - accel_start_time) >= pdMS_TO_TICKS(7800) && accel_z <= 1000.0f)
-      {
-        burnoutStartTime = now;
-        Rocket.flightState = STATE_BURNOUT;
-        printf("BURNOUT at %lu ms\r\n", now);
-      }
-      break;
-
-    case STATE_BURNOUT:
-      if ((now - burnoutStartTime) >= pdMS_TO_TICKS(1000))
-      {
-        Rocket.flightState = STATE_CANARDS_ACTIVATE;
-        printf("CANARDS ACTIVE\r\n");
-        canardActivationTime = now;
-      }
-      break;
-
-    case STATE_CANARDS_ACTIVATE:
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
-      if (Rocket.estimate.velocity <= 50.0f && (now - canardActivationTime) >= pdMS_TO_TICKS(15000))
-      {
-        Rocket.flightState = STATE_DESCENT;
-      }
-      break;
-
-    case STATE_DESCENT:
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
-      break;
-
-    default:
-      printf("Invalid state somehow...");
-      break;
-    }
-
-    if (Rocket.flightState != STATE_PAD)
-    {
-      xTaskNotifyGive(altEstTaskHandle);
-      xTaskNotifyGive(oriEstTaskHandle);
-    }
-
-    if (Rocket.flightState == STATE_BOOST ||
-        Rocket.flightState == STATE_BURNOUT ||
-        Rocket.flightState == STATE_CANARDS_ACTIVATE ||
-        Rocket.flightState == STATE_DESCENT)
-    {
-      xTaskNotifyGive(dataStoreTaskHandle);
-    }
-
-    // Satisfy watchdog for tasks intentionally not running in current state
-    if (Rocket.flightState == STATE_PAD)
-    {
-      altEstTask = true;
-      oriEstTask = true;
-      dataStoreTask = true;
-      radioTask = true;
-      controlTask = true;
-    }
-
-    launchDetTask = true;
+    satisfyWDG();
   }
 }
 
 void vDataStoreTask(void *argument)
 {
-  UINT bytesWritten;
-  uint32_t syncCounter = 0;
-  char csvBuffer[128];
-  bool sdAttempted = false;
-  radioQueueHandle = xQueueCreate(1, sizeof(csvBuffer));
+  uint8_t len;
+  bool sdInitialized = DataStore_SDCardInit();
+  radioQueueHandle = xQueueCreate(1, 128); // 128 is the size of csvBuffer
 
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    dataStoreTask = true;  // always set flag first — SD ops below must not block WDG
-
-    if (!sdAttempted)
-    {
-      sdAttempted = true;
-      bool cardPresent = (HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin) == GPIO_PIN_RESET);
-      printf("[SD] card detect pin=%d present=%d\r\n",
-             HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
-
-      if (cardPresent)
-      {
-        if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
-        {
-          printf("[SD] mount failed\r\n");
-          sdInitialized = false;
-        }
-        else if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE) != FR_OK)
-        {
-          printf("[SD] open failed\r\n");
-          sdInitialized = false;
-        }
-        else
-        {
-          sdInitialized = true;
-          printf("[SD] ready\r\n");
-          if (f_size(&SDFile) == 0)
-          {
-            char *fileHeaders =
-                "timestamp (ms), flight_state (enum), "
-                "accel_x (centi-mg), accel_y (centi-mg), accel_z (centi-mg), "
-                "gyro_x (centi-dps), gyro_y (centi-dps), gyro_z (centi-dps), "
-                "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
-                "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
-                "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
-                "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg)"
-                "\r\n";
-            f_puts(fileHeaders, &SDFile);
-          }
-        }
-      }
-      else
-      {
-        printf("[SD] no card detected, skipping SD\r\n");
-        sdInitialized = false;
-      }
-      continue;
-    }
+    dataStoreTask = true; // always set flag first — SD ops below must not block WDG
 
     if (!sdInitialized)
     {
       continue;
     }
 
-    // NOTE: UNCOMMENT WHEN FLYING THE ROCKET
+    DataStore_TelemetrySnapshot();
+    len = DataStore_WriteToCSV();
 
-    // if (Rocket.flightState == STATE_PAD)
-    // {
-    //   dataStoreTask = true;
-    //   continue;
-    // }
-
-    taskENTER_CRITICAL();
-    memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
-    memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
-    memcpy(Rocket.snapshot.mag, Rocket.rawData.mag, sizeof(Rocket.snapshot.mag));
-    memcpy(Rocket.snapshot.rpy, Rocket.estimate.rpy, sizeof(Rocket.snapshot.rpy));
-    taskEXIT_CRITICAL();
-
-    Rocket.snapshot.pressure = Rocket.rawData.pressure;
-    Rocket.snapshot.position = Rocket.estimate.position;
-    Rocket.snapshot.velocity = Rocket.estimate.velocity;
-    Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
-    Rocket.snapshot.rollError = Rocket.control.rollError;
-    Rocket.snapshot.pwmAngle = Rocket.control.pwmAngle;
-    Rocket.snapshot.pitchError = Rocket.control.pitchError;
-    Rocket.snapshot.flightState = Rocket.flightState;
-    Rocket.snapshot.timestamp = osKernelGetTickCount();
-
-    // Now format the snapshot into CSV
-    int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
-    len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", Rocket.snapshot.flightState);
-
-#define APPEND_SCALED(value) \
-  len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)((value) * 100))
-    APPEND_SCALED(Rocket.snapshot.accel[0]);
-    APPEND_SCALED(Rocket.snapshot.accel[1]);
-    APPEND_SCALED(Rocket.snapshot.accel[2]);
-    APPEND_SCALED(Rocket.snapshot.gyro[0]);
-    APPEND_SCALED(Rocket.snapshot.gyro[1]);
-    APPEND_SCALED(Rocket.snapshot.gyro[2]);
-    APPEND_SCALED(Rocket.snapshot.mag[0]);
-    APPEND_SCALED(Rocket.snapshot.mag[1]);
-    APPEND_SCALED(Rocket.snapshot.mag[2]);
-    APPEND_SCALED(Rocket.snapshot.rpy[0]);
-    APPEND_SCALED(Rocket.snapshot.rpy[1]);
-    APPEND_SCALED(Rocket.snapshot.rpy[2]);
-    APPEND_SCALED(Rocket.snapshot.tiltAngle);
-    APPEND_SCALED(Rocket.snapshot.position);
-    APPEND_SCALED(Rocket.snapshot.velocity);
-    APPEND_SCALED(Rocket.snapshot.rollError);
-    APPEND_SCALED(Rocket.snapshot.pitchError);
-    APPEND_SCALED(Rocket.snapshot.pwmAngle);
-
-    len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
-
-#undef APPEND_SCALED
-
-    if (len <= 0 || len >= (int)sizeof(csvBuffer))
-    {
-      dataStoreTask = true;
-      continue;
-    }
-
-    if (f_write(&SDFile, csvBuffer, (UINT)len, &bytesWritten) != FR_OK || bytesWritten != (UINT)len)
-    {
-      dataStoreTask = true;
-      continue;
-    }
-
-    if (++syncCounter >= 50)
-    {
-      f_sync(&SDFile);
-      syncCounter = 0;
-    }
-
-    // write queue to send data to vRadioTask
-    xQueueSend(radioQueueHandle, csvBuffer, 0);
-
-    // xTaskNotifyGive(radioTaskHandle);
-    dataStoreTask = true;
+    DataStore_WriteToSDCard(len);
+    send_to_radio();
   }
 }
 
@@ -648,7 +429,7 @@ void vHeartbeatTask(void *argument)
       launchDetTask = false;
       dataStoreTask = false;
       controlTask = false;
-      radioTask = false;
+      // radioTask = false;
       oriEstTask = false;
     }
     else
@@ -676,7 +457,7 @@ void vHeartbeatTask(void *argument)
 //       {
 //         strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
 //         sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t *)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
 //         {
 //           printf("I2C transmission 1 to ESP32 failed\r\n");
 //         }
@@ -688,31 +469,6 @@ void vHeartbeatTask(void *argument)
 //     radioTask = true;
 //   }
 // }
-
-void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
-{
-  (void)xTask;
-  uint8_t count = 8; // unknown
-  if      (pcTaskName[0] == 'r')                            count = 1; // readSensorTask
-  else if (pcTaskName[0] == 'a' && pcTaskName[1] == 'l')   count = 2; // altTask
-  else if (pcTaskName[0] == 'a' && pcTaskName[1] == 't')   count = 3; // attitudeTask (oriEst)
-  else if (pcTaskName[0] == 'l')                            count = 4; // launchTask
-  else if (pcTaskName[0] == 's')                            count = 5; // storeTask
-  else if (pcTaskName[0] == 'c')                            count = 6; // controlCanards
-  else if (pcTaskName[0] == 'w')                            count = 7; // wdgTask
-
-  while (1)
-  {
-    for (uint8_t i = 0; i < count; i++)
-    {
-      GPIOC->BSRR = GPIO_PIN_13 | GPIO_PIN_7;
-      for (volatile uint32_t j = 0; j < 20000000; j++);  // ~400ms on
-      GPIOC->BSRR = ((uint32_t)(GPIO_PIN_13 | GPIO_PIN_7)) << 16u;
-      for (volatile uint32_t j = 0; j < 20000000; j++);  // ~400ms off
-    }
-    for (volatile uint32_t j = 0; j < 100000000; j++); // ~2.5s pause between sequences
-  }
-}
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
