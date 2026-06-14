@@ -20,14 +20,29 @@ extern bool dataStoreTask;
 extern bool controlTask;
 extern bool oriEstTask;
 
-float accel_z;
-static uint32_t accel_start_time = 0;
-static bool threshold_active = false;
-static uint32_t burnoutStartTime = 0;
-static bool launch_recorded = false;
-static uint32_t canardActivationTime = 0;
+float accel_z_mg;
+float accel_z_m_s2;
 
-void checkRecorded(){
+static bool threshold_active = false;
+static bool launch_recorded = false;
+static uint32_t accel_start_time = 0;
+static uint32_t booster_burnout_start = 0;
+static uint32_t separation_time_start = 0;
+static uint32_t sustainer_ignition_start = 0;
+
+uint32_t elapsed_time = 0;
+
+const float LIFTOFF_G = 11.15f;
+const float LIFTOFF_ACCEL = 109.462824f;
+const float BOOSTER_BURNOUT_TIME = 5000.0f;
+const float STAGE_SEPARATION_TIME = 1000.0f;
+const float SUSTAINER_IGNITION = 1000.0f;
+const float SUSTAINER_BURNOUT_G = 9.75608563f;
+const float SUSTAINER_BURNOUT_ACCEL = 95.7072f;
+const float SUSTAINER_BURNOUT_TIME = 4900.0f;
+
+void checkRecorded()
+{
   if (Rocket.flightState != STATE_PAD && !launch_recorded)
   {
     Rocket.estimate.launch_tick = osKernelGetTickCount();
@@ -35,57 +50,101 @@ void checkRecorded(){
   }
 }
 
-void checkFlightState(){
+void state_pad(uint32_t now)
+{
+  if (accel_z_mg >= LIFTOFF_G * 1000 || accel_z_m_s2 >= LIFTOFF_ACCEL)
+  {
+    // Capture the rising-edge time ONCE. Resetting it every cycle would keep
+    // (now - accel_start_time) at 0, so the 100ms debounce could never elapse.
+    if (!threshold_active)
+    {
+      accel_start_time = now;
+      threshold_active = true;
+    }
+
+    if ((now - accel_start_time) >= pdMS_TO_TICKS(100))
+    {
+      booster_burnout_start = now;
+      Rocket.flightState = STATE_BOOSTER_BURNOUT;
+    }
+  }
+  else
+  {
+    threshold_active = false;
+  }
+}
+
+void state_booster_burnout(uint32_t now)
+{
+  elapsed_time = now - booster_burnout_start;
+
+  // booster 4 seconds then 1 sec after separation
+  if (elapsed_time >= pdMS_TO_TICKS(BOOSTER_BURNOUT_TIME))
+  {
+    separation_time_start = now;
+    Rocket.flightState = STATE_SEPARATION;
+  }
+}
+
+void state_separation(uint32_t now)
+{
+  elapsed_time = now - separation_time_start;
+
+  if (elapsed_time >= pdMS_TO_TICKS(STAGE_SEPARATION_TIME))
+  {
+    sustainer_ignition_start = now;
+    Rocket.flightState = STATE_SUSTAINER_IGNITION;
+  }
+}
+
+void state_sustainer_ignition(uint32_t now)
+{
+  elapsed_time = now - sustainer_ignition_start;
+
+  if (elapsed_time >= pdMS_TO_TICKS(SUSTAINER_IGNITION) ||
+      accel_z_mg >= SUSTAINER_BURNOUT_G * 1000 ||
+      accel_z_m_s2 >= SUSTAINER_BURNOUT_ACCEL)
+  {
+    Rocket.flightState = STATE_CANARDS_ACTIVATE;
+  }
+}
+
+void state_canards_activate()
+{
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+
+  if (Rocket.estimate.velocity <= 50.0f)
+  {
+    Rocket.flightState = STATE_DESCENT;
+  }
+}
+
+void checkFlightState()
+{
   uint32_t now = osKernelGetTickCount();
-  accel_z = Rocket.rawData.accel[2] - 1000.0f;
+  accel_z_mg = Rocket.rawData.accel[2];
+  accel_z_m_s2 = Rocket.rawData.accel[2] * 9.81 / 1000;
+
   switch (Rocket.flightState)
   {
   case STATE_PAD:
-    if (accel_z >= 4000.0f)
-    {
-      if (!threshold_active)
-      {
-        accel_start_time = now;
-        threshold_active = true;
-      }
-
-      if ((now - accel_start_time) >= pdMS_TO_TICKS(100))
-      {
-        Rocket.flightState = STATE_BOOST;
-        printf("LAUNCH DETECTED at %lu ms\r\n", now);
-      }
-    }
-    
-    else
-    {
-      threshold_active = false;
-    }
+    state_pad(now);
     break;
 
-  case STATE_BOOST:
-    if ((now - accel_start_time) >= pdMS_TO_TICKS(7800) && accel_z <= 1000.0f)
-    {
-      burnoutStartTime = now;
-      Rocket.flightState = STATE_BURNOUT;
-      printf("BURNOUT at %lu ms\r\n", now);
-    }
+  case STATE_BOOSTER_BURNOUT:
+    state_booster_burnout(now);
     break;
 
-  case STATE_BURNOUT:
-    if ((now - burnoutStartTime) >= pdMS_TO_TICKS(1000))
-    {
-      Rocket.flightState = STATE_CANARDS_ACTIVATE;
-      printf("CANARDS ACTIVE\r\n");
-      canardActivationTime = now;
-    }
+  case STATE_SEPARATION:
+    state_separation(now);
+    break;
+
+  case STATE_SUSTAINER_IGNITION:
+    state_sustainer_ignition(now);
     break;
 
   case STATE_CANARDS_ACTIVATE:
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
-    if (Rocket.estimate.velocity <= 50.0f && (now - canardActivationTime) >= pdMS_TO_TICKS(15000))
-    {
-      Rocket.flightState = STATE_DESCENT;
-    }
+    state_canards_activate();
     break;
 
   case STATE_DESCENT:
@@ -98,16 +157,17 @@ void checkFlightState(){
   }
 }
 
-
-void notifyTasks(){
+void notifyTasks()
+{
   if (Rocket.flightState != STATE_PAD)
   {
     xTaskNotifyGive(altEstTaskHandle);
     xTaskNotifyGive(oriEstTaskHandle);
   }
 
-  if (Rocket.flightState == STATE_BOOST ||
-      Rocket.flightState == STATE_BURNOUT ||
+  if (Rocket.flightState == STATE_BOOSTER_BURNOUT ||
+      Rocket.flightState == STATE_SEPARATION ||
+      Rocket.flightState == STATE_SUSTAINER_IGNITION ||
       Rocket.flightState == STATE_CANARDS_ACTIVATE ||
       Rocket.flightState == STATE_DESCENT)
   {
@@ -115,7 +175,8 @@ void notifyTasks(){
   }
 }
 
-void satisfyWDG(){
+void satisfyWDG()
+{
   // Satisfy watchdog for tasks intentionally not running in current state
   if (Rocket.flightState == STATE_PAD)
   {
@@ -127,4 +188,3 @@ void satisfyWDG(){
 
   launchDetTask = true;
 }
-

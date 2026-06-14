@@ -14,30 +14,13 @@
 
 #ifndef GPS_H
 #define GPS_H
-// Structure to hold everything known about the GNSS state
+// Intermediate parsing struct — only the fields we actually write
 typedef struct {
-    // Quality Tracking
-    bool has_fix;
-    int fix_quality;        // 0 = Invalid, 1 = GPS Fix, 2 = DGPS Fix (from GGA)
-    int satellites_tracked; // Number of satellites in use (from GGA)
-    
-    // Position & Time
-    char utc_time[9];       // HH:MM:SS
-    char date[11];          // YYYY-MM-DD
-    double latitude;        // Decimal degrees
-    double longitude;       // Decimal degrees
-    float altitude_m;       // Altitude above sea level (meters)
-    
-    // Dynamics
-    float speed_knots;      // Speed in knots
-    float speed_kmh;        // Speed in km/h
-    float heading_true;     // True track heading (degrees)
-    
-    // Precision Dilution (DOPs from GSA)
-    float pdop;             // Position Dilution
-    float hdop;             // Horizontal Dilution
-    float vdop;             // Vertical Dilution
-    int active_sat_ids[12]; // Array of active satellite IDs being tracked
+    bool   has_fix;     // $GNRMC status == 'A'
+    double latitude;    // $GNRMC
+    double longitude;   // $GNRMC
+    float  altitude_m;  // $GNGGA
+    float  speed_kmh;   // $GNRMC
 } GNSS_Data;
 
 

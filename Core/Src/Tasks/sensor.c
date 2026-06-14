@@ -30,7 +30,7 @@ const float alpha_gyro = 0.2f;
 
 void sensor_HardwareInit()
 {
-    // magInit();
+    magInit();
     LSM6DSO32_Rocket_Init(&hspi1);
     Barometer_init();
 
@@ -42,15 +42,14 @@ void sensor_HardwareInit()
 }
 
 // I2C1: Magnetometer
-void sensor_ReadMagnetometer(void){
-    if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-        magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
-    
-    xSemaphoreGive(gI2c1Mutex);
+void sensor_ReadMagnetometer(void)
+{
+    magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
 }
-    
+
 // SPI2: Barometer
-void sensor_ReadBarometer(void){
+void sensor_ReadBarometer(void)
+{
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
     {
         int32_t p_mbar_x100 = Barometer_getPressure(true);
@@ -64,7 +63,8 @@ void sensor_ReadBarometer(void){
 }
 
 // SPI1: IMU - accelerometer
-void sensor_ReadIMUAccelerometer(void){
+void sensor_ReadIMUAccelerometer(void)
+{
     if (xSemaphoreTake(xImuAccelReadySemaphore, 0) != pdTRUE)
         return;
 
@@ -73,15 +73,16 @@ void sensor_ReadIMUAccelerometer(void){
         LSM6DSO32_Read_Accel(Rocket.rawData.accel);
         for (int i = 0; i < 3; i++)
         {
-          accel_filt[i] = (alpha_accel * Rocket.rawData.accel[i]) + ((1.0f - alpha_accel) * accel_filt[i]);
-          Rocket.rawData.accel[i] = accel_filt[i];
+            accel_filt[i] = (alpha_accel * Rocket.rawData.accel[i]) + ((1.0f - alpha_accel) * accel_filt[i]);
+            Rocket.rawData.accel[i] = accel_filt[i];
         }
         xSemaphoreGive(gSpi1Mutex);
     }
 }
 
 // SPI1: IMU - gyro
-void sensor_ReadIMUGyro(void){
+void sensor_ReadIMUGyro(void)
+{
     if (xSemaphoreTake(xImuGyroReadySemaphore, 0) != pdTRUE)
         return;
 
@@ -98,12 +99,13 @@ void sensor_ReadIMUGyro(void){
     }
 }
 
-void sensor_GroundReference(void){
+void sensor_GroundReference(void)
+{
     static bool groundCaptured = false;
     if (!groundCaptured && Rocket.flightState == STATE_PAD && Rocket.rawData.pressure > 0.0f)
     {
-      setGroundPressure(Rocket.rawData.pressure);
-      groundCaptured = true;
+        setGroundPressure(Rocket.rawData.pressure);
+        groundCaptured = true;
     }
     xTaskNotifyGive(launchDetTaskHandle);
 }
