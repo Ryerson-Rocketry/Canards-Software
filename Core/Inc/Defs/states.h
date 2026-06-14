@@ -79,6 +79,7 @@ typedef struct __attribute__((packed))
     float position;
     float velocity;
     float pressure;
+    float temperature;
     float tiltAngle;
     float rpy[3];
     float rollError;

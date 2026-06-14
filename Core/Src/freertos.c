@@ -176,6 +176,7 @@ void vGpsTask(void *argument)
 
 void vReadSensorTask(void *argument)
 {
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
   sensor_HardwareInit();
 
   for (;;)
@@ -253,7 +254,7 @@ void vAltEstTask(void *argument)
 
     stateTransition[0][1] = dt;
 
-    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
+    accel_in_m_s2 = (Rocket.rawData.accel[2] - 100000.0f) * 0.0000980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
     if (fabsf(accel_in_m_s2) > 500.0f)
       accel_in_m_s2 = 0.0f;
 
@@ -334,6 +335,12 @@ void vDataStoreTask(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     dataStoreTask = true; // always set flag first — SD ops below must not block WDG
 
+    if (Rocket.flightState == STATE_PAD)
+    {
+      dataStoreTask = true;
+      continue;
+    }
+
     if (!sdInitialized)
     {
       continue;
@@ -353,25 +360,15 @@ void vControlTask(void *argument)
   float rollError = 0;
   static float integral = 0;
   float derivative, output = 0;
-  uint32_t activationStartTime = 0;
-  bool startTimeCaptured = false;
   float pitchSetPoint = 0.0f;
 
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
     if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
     {
-      if (!startTimeCaptured)
-      {
-        activationStartTime = osKernelGetTickCount();
-        startTimeCaptured = true;
-        integral = 0;
-      }
-
-      uint32_t elapsedMillis = osKernelGetTickCount() - activationStartTime;
+      uint32_t elapsedMillis = osKernelGetTickCount();
 
       if ((elapsedMillis % 10000) < 5000)
       {
@@ -405,7 +402,6 @@ void vControlTask(void *argument)
     }
     else
     {
-      startTimeCaptured = false;
       setPoint = 0.0f;
       integral = 0;
       output = 0;

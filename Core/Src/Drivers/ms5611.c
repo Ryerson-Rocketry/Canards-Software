@@ -259,21 +259,16 @@ void Barometer_calculate()
     altitude = (1 - pow(r, c)) * 44330.77;
 }
 
-static float groundPressurePa = 101325.0f; // Default to standard
+static float groundPressurePa = 101325.0f; // default to standard sea-level pressure
 
 void setGroundPressure(float p)
 {
     groundPressurePa = p;
 }
 
-float getGroundPressure(void)
-{
-    return groundPressurePa;
-}
-
 float getRelativeAltitude(float currentPressurePa)
 {
-    // Standard atmosphere formula relative to ground pressure
-    // 44330.0f * (1 - (P/P0)^0.1903)
+    // Standard atmosphere formula relative to the captured ground pressure:
+    // h = 44330 * (1 - (P / P0)^0.1903)
     return 44330.0f * (1.0f - powf(currentPressurePa / groundPressurePa, 0.1903f));
 }

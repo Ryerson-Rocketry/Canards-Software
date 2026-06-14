@@ -73,6 +73,7 @@ bool DataStore_SDCardInit(void)
             "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
             "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
             "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
+            "pressure (centi-Pa), temperature (centi-degC), pressure_raw_d1, "
             "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg), "
             "gps_fix, lat (1e-7 deg), lon (1e-7 deg), alt (cm), speed (centi-kmh)"
             "\r\n";
@@ -87,13 +88,6 @@ bool DataStore_SDCardInit(void)
 
 void DataStore_TelemetrySnapshot(void)
 {
-    // NOTE: UNCOMMENT WHEN FLYING THE ROCKET
-
-    // if (Rocket.flightState == STATE_PAD)
-    // {
-    //   dataStoreTask = true;
-    //   continue;
-    // }
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
     memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
@@ -102,6 +96,7 @@ void DataStore_TelemetrySnapshot(void)
     taskEXIT_CRITICAL();
 
     Rocket.snapshot.pressure = Rocket.rawData.pressure;
+    Rocket.snapshot.temperature = Rocket.rawData.temperature;
     Rocket.snapshot.position = Rocket.estimate.position;
     Rocket.snapshot.velocity = Rocket.estimate.velocity;
     Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
@@ -134,6 +129,8 @@ uint8_t DataStore_WriteToCSV(void)
     APPEND_SCALED(Rocket.snapshot.tiltAngle);
     APPEND_SCALED(Rocket.snapshot.position);
     APPEND_SCALED(Rocket.snapshot.velocity);
+    APPEND_SCALED(Rocket.snapshot.pressure);
+    APPEND_SCALED(Rocket.snapshot.temperature);
     APPEND_SCALED(Rocket.snapshot.rollError);
     APPEND_SCALED(Rocket.snapshot.pitchError);
     APPEND_SCALED(Rocket.snapshot.pwmAngle);
