@@ -18,7 +18,7 @@ AttitudeEstimation::AttitudeEstimation(/* args */)
 
     this->gyroNoiseSigma = 0.01f; 
     this->measurementNoiseCov = Eigen::Matrix<float, 6, 6>::Identity();
-    this->measurementNoiseCov.block<3,3>(0,0) *= 0.1f;  // accel noise
+    this->measurementNoiseCov.block<3,3>(0,0) *= 0.01f;  // accel noise
     this->measurementNoiseCov.block<3,3>(3,3) *= 0.5f;  // mag noise
 }
 

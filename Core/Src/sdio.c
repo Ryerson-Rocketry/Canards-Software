@@ -60,6 +60,10 @@ void MX_SDIO_SD_Init(void)
   {
     Error_Handler();
   }
+
+  // NOTE: the transfer-clock bump moved to DataStore_SDCardInit (after f_mount).
+  // Doing it here is pointless: f_mount -> BSP_SD_Init -> HAL_SD_Init reprograms
+  // CLKCR back to ClockDiv=118 (400 kHz), clobbering anything set here.
   /* USER CODE END SDIO_Init 2 */
 
 }

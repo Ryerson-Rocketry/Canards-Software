@@ -53,6 +53,11 @@ static int32_t temperature;
 static int32_t pressure;
 static float altitude;
 
+// Non-blocking conversion state
+static uint32_t baro_D1 = 0;        // latest raw pressure
+static uint32_t baro_D2 = 0;        // latest raw temperature
+static uint8_t baro_readPhase = 0;  // 0 = pressure result due next, 1 = temp result due next
+
 /**
  * @brief init the pressure sensor with default parameters
  */
@@ -73,21 +78,12 @@ static void ms5611_write(uint8_t data);
 static uint16_t ms5611_read16bits(uint8_t reg);
 static uint32_t ms5611_read24bits(uint8_t reg);
 
-/**
- * @brief read the raw value
- *
- * @return the value read on the SPI bus
- */
-static uint32_t ms5611_readRawTemp();
-static uint32_t ms5611_readRawPressure();
-
 static void ms5611_init()
 {
     MS5611_DIS
-    HAL_Delay(10);
 
     ms5611_write(CMD_RESET);
-    HAL_Delay(10);
+    HAL_Delay(4); // PROM reload after reset is spec'd <= 2.8 ms
 
     prom[0] = ms5611_read16bits(CMD_PROM_C1);
     prom[1] = ms5611_read16bits(CMD_PROM_C2);
@@ -95,6 +91,15 @@ static void ms5611_init()
     prom[3] = ms5611_read16bits(CMD_PROM_C4);
     prom[4] = ms5611_read16bits(CMD_PROM_C5);
     prom[5] = ms5611_read16bits(CMD_PROM_C6);
+
+    // Seed temperature once (init-only blocking read) so the first compensated
+    // pressure is valid, then start the first pressure conversion. From here the
+    // loop collects each conversion one cycle after it was started, no waiting.
+    ms5611_write(tempAddr);
+    HAL_Delay(4);
+    baro_D2 = ms5611_read24bits(0x00);
+    ms5611_write(pressAddr);
+    baro_readPhase = 0;
 }
 
 static void ms5611_write(uint8_t data)
@@ -130,32 +135,6 @@ static uint32_t ms5611_read24bits(uint8_t reg)
     MS5611_DIS
     return_value = ((uint32_t)byte[1] << 16) | ((uint32_t)(byte[2] << 8)) | (byte[3]);
     return return_value;
-}
-
-static uint32_t ms5611_readRawTemp()
-{
-    uint32_t D2;
-    // Convert temp
-    ms5611_write(tempAddr);
-    // Conversion Time
-    HAL_Delay(convDelay);
-    // Read ADC
-    D2 = ms5611_read24bits(0x00);
-
-    return D2;
-}
-
-static uint32_t ms5611_readRawPressure()
-{
-    uint32_t D1;
-    // Convert pressure
-    ms5611_write(pressAddr);
-    // Conversion time
-    HAL_Delay(convDelay);
-    // Read ADC
-    D1 = ms5611_read24bits(0x00);
-
-    return D1;
 }
 
 void Barometer_init()
@@ -230,8 +209,24 @@ void Barometer_calculate()
     uint32_t D1, D2;
     float press, r, c;
 
-    D1 = ms5611_readRawPressure();
-    D2 = ms5611_readRawTemp();
+    /* Non-blocking: collect the conversion started last cycle (the loop period
+     * is far longer than the ~1 ms conversion, so it is always ready), then
+     * start the next one. Pressure and temperature alternate; no HAL_Delay. */
+    if (baro_readPhase == 0)
+    {
+        baro_D1 = ms5611_read24bits(0x00); // pressure result (started last cycle)
+        ms5611_write(tempAddr);            // start temperature conversion
+        baro_readPhase = 1;
+    }
+    else
+    {
+        baro_D2 = ms5611_read24bits(0x00); // temperature result
+        ms5611_write(pressAddr);           // start pressure conversion
+        baro_readPhase = 0;
+    }
+
+    D1 = baro_D1;
+    D2 = baro_D2;
 
     dT = D2 - ((long)prom[4] * 256);
     TEMP = 2000 + ((int64_t)dT * prom[5]) / 8388608;

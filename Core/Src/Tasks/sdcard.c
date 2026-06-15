@@ -19,7 +19,7 @@ extern TaskHandle_t radioTaskHandle;
 extern Rocket_States_t Rocket;
 
 static bool sdInitialized = false;
-static char csvBuffer[256];
+static char csvBuffer[512]; // must hold the full CSV record; 256 could overflow once GPS fix fields are added
 static uint32_t syncCounter = 0;
 UINT bytesWritten;
 
@@ -37,8 +37,6 @@ UINT bytesWritten;
 bool DataStore_SDCardInit(void)
 {
     bool cardPresent = (HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin) == GPIO_PIN_RESET);
-    printf("[SD] card detect pin=%d present=%d\r\n",
-           HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
 
     if (!cardPresent)
     {
@@ -54,7 +52,7 @@ bool DataStore_SDCardInit(void)
         return false;
     }
 
-    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE) != FR_OK)
+    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
     {
         printf("[SD] Open failed.\r\n");
         sdInitialized = false;
@@ -64,25 +62,25 @@ bool DataStore_SDCardInit(void)
     sdInitialized = true;
     printf("[SD] ready\r\n");
 
-    if (f_size(&SDFile) == 0)
-    {
-        char *fileHeaders =
-            "timestamp (ms), flight_state (enum), "
-            "accel_x (centi-mg), accel_y (centi-mg), accel_z (centi-mg), "
-            "gyro_x (centi-dps), gyro_y (centi-dps), gyro_z (centi-dps), "
-            "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
-            "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
-            "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
-            "pressure (centi-Pa), temperature (centi-degC), pressure_raw_d1, "
-            "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg), "
-            "gps_fix, lat (1e-7 deg), lon (1e-7 deg), alt (cm), speed (centi-kmh)"
-            "\r\n";
-        f_puts(fileHeaders, &SDFile);
-    }
-    else
-    {
-        sdInitialized = false;
-    }
+    // Raise the SDIO transfer clock now that f_mount/BSP_SD_Init has run (it reset
+    // CLKCR to the 400 kHz init clock). SDIO_CK = 48 MHz / (CLKDIV + 2); CLKDIV=2 -> 12 MHz.
+    // Back off (e.g. 6 -> 6 MHz) if the card proves flaky at 12 MHz.
+    MODIFY_REG(hsd.Instance->CLKCR, SDIO_CLKCR_CLKDIV, 2U);
+
+    // Fresh file every startup (FA_CREATE_ALWAYS truncated it), so always write the header.
+    char *fileHeaders =
+        "timestamp (ms), flight_state (enum), "
+        "accel_x (centi-mg), accel_y (centi-mg), accel_z (centi-mg), "
+        "gyro_x (centi-dps), gyro_y (centi-dps), gyro_z (centi-dps), "
+        "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
+        "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
+        "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
+        "pressure (centi-Pa), temperature (centi-degC), "
+        "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg), "
+        "gps_fix, lat (1e-7 deg), lon (1e-7 deg), alt (cm), speed (centi-kmh)"
+        "\r\n";
+    f_puts(fileHeaders, &SDFile);
+
     return sdInitialized;
 }
 
@@ -107,7 +105,7 @@ void DataStore_TelemetrySnapshot(void)
     Rocket.snapshot.timestamp = osKernelGetTickCount();
 }
 
-uint8_t DataStore_WriteToCSV(void)
+int DataStore_WriteToCSV(void)
 {
     int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", Rocket.snapshot.flightState);
@@ -157,7 +155,7 @@ uint8_t DataStore_WriteToCSV(void)
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
 
 #undef APPEND_SCALED
-    return (uint8_t)len;
+    return len;
 }
 
 void DataStore_WriteToSDCard(int len)
@@ -172,7 +170,7 @@ void DataStore_WriteToSDCard(int len)
         dataStoreTask = true;
     }
 
-    if (++syncCounter >= 50)
+    if (++syncCounter >= 200)
     {
         f_sync(&SDFile);
         syncCounter = 0;
@@ -184,7 +182,7 @@ void send_to_radio()
     // write queue to send data to vRadioTask
     if (xQueueSend(radioQueueHandle, csvBuffer, 0) == pdPASS)
     {
-        // xTaskNotifyGive(radioTaskHandle);
+        xTaskNotifyGive(radioTaskHandle);
     }
 
     dataStoreTask = true;
