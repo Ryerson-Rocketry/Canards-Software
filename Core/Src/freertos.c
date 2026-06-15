@@ -334,9 +334,9 @@ void vLaunchDetTask(void *argument)
 
 void vDataStoreTask(void *argument)
 {
-  uint8_t len;
+  int len; // must hold the full row length (~294 B); a uint8_t would wrap at 256 and truncate the SD write
   bool sdInitialized = DataStore_SDCardInit();
-  radioQueueHandle = xQueueCreate(1, 128); // 128 is the size of csvBuffer
+  radioQueueHandle = xQueueCreate(1, CSV_BUFFER_SIZE); // item size must match csvBuffer so the full row isn't truncated
 
   for (;;)
   {

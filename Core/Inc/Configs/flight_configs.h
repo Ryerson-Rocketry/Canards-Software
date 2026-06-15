@@ -13,6 +13,10 @@
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 #define FLIGHT_DATA_FILE_NAME "LOG.CSV"
+// One CSV row is ~294 B worst case (all 28 fields incl. a GPS fix); 512 gives margin.
+// The SD buffer, the radio queue item size, and the radio task buffers MUST all use
+// this so the full row isn't truncated or read past the end of the buffer.
+#define CSV_BUFFER_SIZE 512
 
 // ─── PID Gains ────────────────────────────────────────────────────────────────
 #define Kp 0.45f

@@ -19,7 +19,7 @@ extern TaskHandle_t radioTaskHandle;
 extern Rocket_States_t Rocket;
 
 static bool sdInitialized = false;
-static char csvBuffer[256];
+static char csvBuffer[CSV_BUFFER_SIZE];
 static uint32_t syncCounter = 0;
 UINT bytesWritten;
 
