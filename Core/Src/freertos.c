@@ -250,7 +250,7 @@ void vAltEstTask(void *argument)
 
     stateTransition[0][1] = dt;
 
-    accel_in_m_s2 = (Rocket.rawData.accel[2] - 100000.0f) * 0.0000980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
+    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
     if (fabsf(accel_in_m_s2) > 500.0f)
       accel_in_m_s2 = 0.0f;
 
