@@ -98,5 +98,5 @@ typedef struct
     RocketState_t estimate;
     ControlData_t control;
     SDCardDataFormat_t snapshot;
-    GpsFix_t gps;
+    // GpsFix_t gps;
 } Rocket_States_t;
