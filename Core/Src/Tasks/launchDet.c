@@ -1,5 +1,6 @@
 #include "Tasks/launchDet.h"
 #include "FreeRTOS.h"
+#include "projdefs.h"
 #include "task.h"
 #include "semphr.h"
 #include "states.h"
@@ -34,7 +35,7 @@ uint32_t elapsed_time = 0;
 
 const float LIFTOFF_G = 11.15f;
 const float LIFTOFF_ACCEL = 109.462824f;
-const float BOOSTER_BURNOUT_TIME = 5000.0f;
+const float BOOSTER_BURNOUT_TIME = 4500.0f;
 const float STAGE_SEPARATION_TIME = 1000.0f;
 const float SUSTAINER_IGNITION = 1000.0f;
 const float SUSTAINER_BURNOUT_G = 9.75608563f;
@@ -101,9 +102,10 @@ void state_sustainer_ignition(uint32_t now)
 {
   elapsed_time = now - sustainer_ignition_start;
 
-  if (elapsed_time >= pdMS_TO_TICKS(SUSTAINER_IGNITION) ||
-      accel_z_mg >= SUSTAINER_BURNOUT_G * 1000 ||
-      accel_z_m_s2 >= SUSTAINER_BURNOUT_ACCEL)
+  if (elapsed_time >= pdMS_TO_TICKS(SUSTAINER_IGNITION) &&
+          accel_z_mg >= SUSTAINER_BURNOUT_G * 1000 &&
+          accel_z_m_s2 >= SUSTAINER_BURNOUT_ACCEL ||
+      elapsed_time >= pdMS_TO_TICKS(6500))
   {
     Rocket.flightState = STATE_CANARDS_ACTIVATE;
   }
