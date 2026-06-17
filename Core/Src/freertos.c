@@ -143,11 +143,11 @@ void vGpsTask(void *argument)
   CS_HIGH();
   vTaskDelay(pdMS_TO_TICKS(1500));
 
-  // only used for setting up the gps
-  gpsSendCfg(cfg_revert, sizeof(cfg_revert));
-  vTaskDelay(pdMS_TO_TICKS(500));
-  gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
-  vTaskDelay(pdMS_TO_TICKS(500));
+  // // only used for setting up the gps
+  // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
+  // vTaskDelay(pdMS_TO_TICKS(500));
+  // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
+  // vTaskDelay(pdMS_TO_TICKS(500));
 
   for (;;)
   {

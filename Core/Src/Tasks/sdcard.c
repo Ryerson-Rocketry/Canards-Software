@@ -64,6 +64,7 @@ bool DataStore_SDCardInit(void)
     sdInitialized = true;
     printf("[SD] ready\r\n");
 
+    // Only write the header on a fresh file; an existing file just gets appended to.
     if (f_size(&SDFile) == 0)
     {
         char *fileHeaders =
@@ -78,10 +79,7 @@ bool DataStore_SDCardInit(void)
             "gps_fix, lat (1e-7 deg), lon (1e-7 deg), alt (cm), speed (centi-kmh)"
             "\r\n";
         f_puts(fileHeaders, &SDFile);
-    }
-    else
-    {
-        sdInitialized = false;
+        f_sync(&SDFile);
     }
     return sdInitialized;
 }
@@ -107,7 +105,7 @@ void DataStore_TelemetrySnapshot(void)
     Rocket.snapshot.timestamp = osKernelGetTickCount();
 }
 
-uint8_t DataStore_WriteToCSV(void)
+int DataStore_WriteToCSV(void)
 {
     int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", Rocket.snapshot.flightState);
@@ -157,7 +155,7 @@ uint8_t DataStore_WriteToCSV(void)
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
 
 #undef APPEND_SCALED
-    return (uint8_t)len;
+    return len;
 }
 
 void DataStore_WriteToSDCard(int len)
