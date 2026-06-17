@@ -102,10 +102,10 @@ void state_sustainer_ignition(uint32_t now)
 {
   elapsed_time = now - sustainer_ignition_start;
 
-  if (elapsed_time >= pdMS_TO_TICKS(SUSTAINER_IGNITION) &&
-          accel_z_mg >= SUSTAINER_BURNOUT_G * 1000 &&
-          accel_z_m_s2 >= SUSTAINER_BURNOUT_ACCEL ||
-      elapsed_time >= pdMS_TO_TICKS(6500))
+  if (((elapsed_time >= pdMS_TO_TICKS(SUSTAINER_IGNITION)) &&
+       (accel_z_mg >= SUSTAINER_BURNOUT_G * 1000) &&
+       (accel_z_m_s2 >= SUSTAINER_BURNOUT_ACCEL)) ||
+      (elapsed_time >= pdMS_TO_TICKS(6500)))
   {
     Rocket.flightState = STATE_CANARDS_ACTIVATE;
   }

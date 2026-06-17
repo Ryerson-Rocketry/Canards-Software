@@ -62,7 +62,7 @@ osThreadId_t gpsTaskHandle;
 QueueHandle_t radioQueueHandle;
 
 // struct data handle init
-Rocket_States_t Rocket = {.flightState = STATE_CANARDS_ACTIVATE};
+Rocket_States_t Rocket = {.flightState = STATE_PAD};
 
 // watchdog task flags
 volatile bool readSensorTask = false;

@@ -162,7 +162,8 @@ void DataStore_WriteToSDCard(int len)
 {
     if (len <= 0 || len >= (int)sizeof(csvBuffer))
     {
-        dataStoreTask = true;
+        dataStoreTask = true; // mark task alive, but skip the bad write (a negative
+        return;               // len cast to UINT is huge -> out-of-bounds f_write)
     }
 
     if (f_write(&SDFile, csvBuffer, (UINT)len, &bytesWritten) != FR_OK || bytesWritten != (UINT)len)
