@@ -129,13 +129,6 @@ void MX_FREERTOS_Init(void)
   // radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
   gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
   heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
-
-  printf("[INIT] tasks: r=%p a=%p o=%p l=%p d=%p c=%p h=%p\r\n",
-         (void *)readSensorTaskHandle, (void *)altEstTaskHandle, (void *)oriEstTaskHandle,
-         (void *)launchDetTaskHandle, (void *)dataStoreTaskHandle, (void *)controlTaskHandle,
-         (void *)heartbeatTaskHandle);
-  if (!dataStoreTaskHandle)
-    printf("[INIT] ERROR: dataStoreTask not created (heap?)\r\n");
 }
 
 void vGpsTask(void *argument)
@@ -151,15 +144,20 @@ void vGpsTask(void *argument)
   vTaskDelay(pdMS_TO_TICKS(1500));
 
   // only used for setting up the gps
-  // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
-  // vTaskDelay(pdMS_TO_TICKS(500));
-  // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
-  // vTaskDelay(pdMS_TO_TICKS(500));
+  gpsSendCfg(cfg_revert, sizeof(cfg_revert));
+  vTaskDelay(pdMS_TO_TICKS(500));
+  gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
+  vTaskDelay(pdMS_TO_TICKS(500));
 
   for (;;)
   {
     gpsRead(gSpi2Mutex, gpsData, dummy_tx);
     process_gps_data((char *)gpsData, &vehicle_gps);
+
+    if (vehicle_gps.has_fix == 1)
+    {
+      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
+    }
 
     taskENTER_CRITICAL();
     Rocket.gps.has_fix = vehicle_gps.has_fix;
@@ -169,7 +167,7 @@ void vGpsTask(void *argument)
     Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
     taskEXIT_CRITICAL();
 
-    osDelay(200);
+    osDelay(1000);
     gpsTask = true;
   }
 }
@@ -198,8 +196,6 @@ void vReadSensorTask(void *argument)
     sensor_GroundReference();
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
-
     readSensorTask = true;
     osDelay(10);
   }
@@ -433,7 +429,6 @@ void vHeartbeatTask(void *argument)
       launchDetTask = false;
       dataStoreTask = false;
       controlTask = false;
-      // radioTask = false;
       oriEstTask = false;
     }
     else
@@ -444,35 +439,6 @@ void vHeartbeatTask(void *argument)
     osDelay(pdMS_TO_TICKS(100));
   }
 }
-
-// void vRadioTask(void *argument)
-// {
-//   char csvBufferReceived[128];
-//   char sendingBuffer[128];
-//   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//   // i2cScanner();
-
-//   for (;;)
-//   {
-//     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-//     if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
-//     {
-//       if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-//       {
-//         strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
-//         sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
-//         {
-//           printf("I2C transmission 1 to ESP32 failed\r\n");
-//         }
-//         memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//       }
-//       xSemaphoreGive(gI2c1Mutex);
-//     }
-
-//     radioTask = true;
-//   }
-// }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
