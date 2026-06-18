@@ -146,8 +146,12 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
     Eigen::Matrix<float, 4, 6> K = stateErrorCov * H.transpose()
                                  * (H * stateErrorCov * H.transpose() + this->measurementNoiseCov).inverse();
 
-    // Innovation: difference between real measurement and predicted measurement
-    Eigen::Matrix<float, 6, 1> innovation = this->Z - H * this->attitude;
+    // Innovation: difference between real measurement and predicted measurement.
+    // h(q) is the reference vectors rotated by the quaternion; it is degree-2
+    // homogeneous in q, so by Euler's theorem H*q = 2*h(q). The predicted
+    // measurement is therefore 0.5*H*q (NOT H*q, which is the linear-KF form and
+    // double-counts h, leaving a static ~0.8 deg tilt bias the filter can't null).
+    Eigen::Matrix<float, 6, 1> innovation = this->Z - 0.5f * (H * this->attitude);
 
     // State correction
     this->attitude = this->attitude + K * innovation;

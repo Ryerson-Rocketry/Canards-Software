@@ -19,7 +19,7 @@ extern TaskHandle_t radioTaskHandle;
 extern Rocket_States_t Rocket;
 
 static bool sdInitialized = false;
-static char csvBuffer[256];
+static char csvBuffer[CSV_BUFFER_SIZE];
 static uint32_t syncCounter = 0;
 UINT bytesWritten;
 
@@ -37,33 +37,34 @@ UINT bytesWritten;
 bool DataStore_SDCardInit(void)
 {
     bool cardPresent = (HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin) == GPIO_PIN_RESET);
-    printf("[SD] card detect pin=%d present=%d\r\n",
-           HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
+    // printf("[SD] card detect pin=%d present=%d\r\n",
+    //        HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
 
     if (!cardPresent)
     {
-        printf("[SD] No card detected. Skipping SD interface.\r\n");
+        // printf("[SD] No card detected. Skipping SD interface.\r\n");
         sdInitialized = false;
         return false;
     }
 
     if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
     {
-        printf("[SD] Mount failed.\r\n");
+        // printf("[SD] Mount failed.\r\n");
         sdInitialized = false;
         return false;
     }
 
-    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE) != FR_OK)
+    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
     {
-        printf("[SD] Open failed.\r\n");
+        // printf("[SD] Open failed.\r\n");
         sdInitialized = false;
         return false;
     }
 
     sdInitialized = true;
-    printf("[SD] ready\r\n");
+    // printf("[SD] ready\r\n");
 
+    // Only write the header on a fresh file; an existing file just gets appended to.
     if (f_size(&SDFile) == 0)
     {
         char *fileHeaders =
@@ -73,27 +74,17 @@ bool DataStore_SDCardInit(void)
             "mag_x (scaled x100), mag_y (scaled x100), mag_z (scaled x100), "
             "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
             "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
-            "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg), "
-            "gps_fix, lat (1e-7 deg), lon (1e-7 deg), alt (cm), speed (centi-kmh)"
+            "pressure (centi-Pa), temperature (centi-degC), "
+            "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg)"
             "\r\n";
         f_puts(fileHeaders, &SDFile);
-    }
-    else
-    {
-        sdInitialized = false;
+        f_sync(&SDFile);
     }
     return sdInitialized;
 }
 
 void DataStore_TelemetrySnapshot(void)
 {
-    // NOTE: UNCOMMENT WHEN FLYING THE ROCKET
-
-    // if (Rocket.flightState == STATE_PAD)
-    // {
-    //   dataStoreTask = true;
-    //   continue;
-    // }
     taskENTER_CRITICAL();
     memcpy(Rocket.snapshot.accel, Rocket.rawData.accel, sizeof(Rocket.snapshot.accel));
     memcpy(Rocket.snapshot.gyro, Rocket.rawData.gyro, sizeof(Rocket.snapshot.gyro));
@@ -102,6 +93,7 @@ void DataStore_TelemetrySnapshot(void)
     taskEXIT_CRITICAL();
 
     Rocket.snapshot.pressure = Rocket.rawData.pressure;
+    Rocket.snapshot.temperature = Rocket.rawData.temperature;
     Rocket.snapshot.position = Rocket.estimate.position;
     Rocket.snapshot.velocity = Rocket.estimate.velocity;
     Rocket.snapshot.tiltAngle = Rocket.estimate.tilt_angle;
@@ -112,7 +104,7 @@ void DataStore_TelemetrySnapshot(void)
     Rocket.snapshot.timestamp = osKernelGetTickCount();
 }
 
-uint8_t DataStore_WriteToCSV(void)
+int DataStore_WriteToCSV(void)
 {
     int len = snprintf(csvBuffer, sizeof(csvBuffer), "%lu", Rocket.snapshot.timestamp);
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", Rocket.snapshot.flightState);
@@ -134,40 +126,43 @@ uint8_t DataStore_WriteToCSV(void)
     APPEND_SCALED(Rocket.snapshot.tiltAngle);
     APPEND_SCALED(Rocket.snapshot.position);
     APPEND_SCALED(Rocket.snapshot.velocity);
+    APPEND_SCALED(Rocket.snapshot.pressure);
+    APPEND_SCALED(Rocket.snapshot.temperature);
     APPEND_SCALED(Rocket.snapshot.rollError);
     APPEND_SCALED(Rocket.snapshot.pitchError);
     APPEND_SCALED(Rocket.snapshot.pwmAngle);
 
-    {
-        GpsFix_t gps_snap;
-        taskENTER_CRITICAL();
-        gps_snap = Rocket.gps;
-        taskEXIT_CRITICAL();
+    // {
+    //     GpsFix_t gps_snap;
+    //     taskENTER_CRITICAL();
+    //     gps_snap = Rocket.gps;
+    //     taskEXIT_CRITICAL();
 
-        len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", (int)gps_snap.has_fix);
-        if (gps_snap.has_fix)
-        {
-            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.latitude * 1e7));
-            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.longitude * 1e7));
-            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.altitude_m * 100.0f));
-            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.speed_kmh * 100.0f));
-        }
-        else
-        {
-            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",0,0,0,0");
-        }
-    }
+    //     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", (int)gps_snap.has_fix);
+    //     if (gps_snap.has_fix)
+    //     {
+    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.latitude * 1e7));
+    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.longitude * 1e7));
+    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.altitude_m * 100.0f));
+    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.speed_kmh * 100.0f));
+    //     }
+    //     else
+    //     {
+    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",0,0,0,0");
+    //     }
+    // }
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
 
 #undef APPEND_SCALED
-    return (uint8_t)len;
+    return len;
 }
 
 void DataStore_WriteToSDCard(int len)
 {
     if (len <= 0 || len >= (int)sizeof(csvBuffer))
     {
-        dataStoreTask = true;
+        dataStoreTask = true; // mark task alive, but skip the bad write (a negative
+        return;               // len cast to UINT is huge -> out-of-bounds f_write)
     }
 
     if (f_write(&SDFile, csvBuffer, (UINT)len, &bytesWritten) != FR_OK || bytesWritten != (UINT)len)
@@ -182,13 +177,14 @@ void DataStore_WriteToSDCard(int len)
     }
 }
 
-void send_to_radio()
-{
-    // write queue to send data to vRadioTask
-    if (xQueueSend(radioQueueHandle, csvBuffer, 0) == pdPASS)
-    {
-        // xTaskNotifyGive(radioTaskHandle);
-    }
+// void send_to_radio()
+// {
 
-    dataStoreTask = true;
-}
+//     // write queue to send data to vRadioTask
+//     if (xQueueSend(radioQueueHandle, csvBuffer, 0) == pdPASS)
+//     {
+//     xTaskNotifyGive(radioTaskHandle);
+//     }
+
+//     dataStoreTask = true;
+// }

@@ -8,41 +8,50 @@
 /* Forward declaration — fixes implicit declaration error */
 uint16_t servoAngleToPWM(float angle);
 
-float getSlope(float velocity)
+// Pressure scaling factor: local pressure / sea-level pressure (e.g. 0.94 at
+// ~500 m). Air thins with altitude, so the same deflection makes less force up high.
+float getPressureScaling(float pressure)
 {
-    if (fabsf(velocity) < 10.0f)
-        return 0.0f;
-    return 82963.0f * powf(velocity, -1.62f);
-}
-
-float getAltitudeScaling(float pressure)
-{
-
     if (pressure <= 0.0f)
-    {
-        pressure = SEA_LEVEL_PA;
-    }
-
-    return 15.6 - 1.27 * logf(pressure);
+        return 1.0f; // no/invalid reading -> assume sea level, apply no correction
+    return pressure / SEA_LEVEL_PA;
 }
 
 uint16_t calcForceToPWM(float torque, float velocity, float pressure)
 {
-    float force = torque / MOMENT_ARM;
-    float slope = getSlope(velocity);
-    float angle = slope * force * getAltitudeScaling(pressure);
+    // angle = coeff(v) * (desired_force / pressure_ratio)
+    float force = torque / MOMENT_ARM;                      // desired control force (N)
+    float sideForce = force / getPressureScaling(pressure); // pressure-normalized force
 
-    if (angle > 20.0f)
+    float controlForceCoeff = 0.0f;
+
+    // x = velocity
+    if (velocity < 330.0f)
     {
-        angle = 20.0f;
+        // subsonic
+        controlForceCoeff = 337 * expf(-0.02777 * velocity);
+    }
+    else
+    {
+        // supersonic
+        controlForceCoeff = 1.74 - (2.7710 * powf(10, -3) * velocity) + (1.4210 * pow(10, -6)) * pow(velocity, 2);
     }
 
-    if (angle < -20.0f)
+    float deflectionAngle = controlForceCoeff * sideForce;
+
+    // float angle = getControlForceCoeff(velocity) * forceNormalized;
+
+    if (deflectionAngle > DEFLECTION_ANGLE_LIMIT)
     {
-        angle = -20.0f;
+        deflectionAngle = DEFLECTION_ANGLE_LIMIT;
     }
 
-    return servoAngleToPWM(angle);
+    if (deflectionAngle < -DEFLECTION_ANGLE_LIMIT)
+    {
+        deflectionAngle = -DEFLECTION_ANGLE_LIMIT;
+    }
+
+    return servoAngleToPWM(deflectionAngle);
 }
 
 uint16_t servoAngleToPWM(float angle)
@@ -60,6 +69,7 @@ uint16_t servoAngleToPWM(float angle)
 /* Commands the servo to the angle required for the given torque + velocity */
 uint16_t moveServo(float torque, float velocity, float pressure)
 {
+
     uint16_t pwm = calcForceToPWM(torque, velocity, pressure);
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm);
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, pwm);

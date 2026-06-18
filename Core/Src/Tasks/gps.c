@@ -16,58 +16,67 @@
 extern SemaphoreHandle_t gSpi2Mutex;
 
 // --- Helper: Validate NMEA Checksum ($...*XX) ---
-bool verify_checksum(const char *sentence) {
+bool verify_checksum(const char *sentence)
+{
     char sentence_copy[128];
     memset(sentence_copy, 0, 128);
     strcpy(sentence_copy, sentence);
     uint8_t checksum = 0;
     uint8_t i = 1;
 
-    if (sentence_copy[0] != '$') 
+    if (sentence_copy[0] != '$')
         return false;
-    
-    while (sentence_copy[i] != '\0' && sentence_copy[i] != '*') {
+
+    while (sentence_copy[i] != '\0' && sentence_copy[i] != '*')
+    {
         checksum ^= sentence_copy[i++];
     }
 
-    if (sentence_copy[i] != '*') 
+    if (sentence_copy[i] != '*')
         return false;
 
     unsigned int expected_checksum;
 
-    if (sscanf(&sentence_copy[i + 1], "%2X", &expected_checksum) != 1) 
+    if (sscanf(&sentence_copy[i + 1], "%2X", &expected_checksum) != 1)
         return false;
-    
 
-        return checksum == (uint8_t)expected_checksum;
+    return checksum == (uint8_t)expected_checksum;
 }
 
 // Convert DDMM.MMMM to Decimal Degrees
-double parse_degrees(const char *raw_val, char direction) {
-    if (strlen(raw_val) == 0) 
+double parse_degrees(const char *raw_val, char direction)
+{
+    if (strlen(raw_val) == 0)
         return 0.0;
     double raw_num = atof(raw_val);
     int degrees = (int)(raw_num / 100);
     double minutes = raw_num - (degrees * 100);
     double decimal_degrees = degrees + (minutes / 60.0);
-    if (direction == 'S' || direction == 'W') decimal_degrees = -decimal_degrees;
+    if (direction == 'S' || direction == 'W')
+        decimal_degrees = -decimal_degrees;
     return decimal_degrees;
 }
 
 // --- Helper: Safe Tokenizer (Handles empty fields like ,, safely) ---
-int tokenize_sentence(char *buffer, char **tokens, int max_tokens) {
+int tokenize_sentence(char *buffer, char **tokens, int max_tokens)
+{
     char *asterisk = strchr(buffer, '*');
-    if (asterisk) *asterisk = ','; // Normalize the checksum boundary
-    
+    if (asterisk)
+        *asterisk = ','; // Normalize the checksum boundary
+
     int token_index = 0;
     char *current = buffer;
-    while (current && token_index < max_tokens) {
+    while (current && token_index < max_tokens)
+    {
         tokens[token_index++] = current;
         char *next_comma = strchr(current, ',');
-        if (next_comma) {
+        if (next_comma)
+        {
             *next_comma = '\0';
             current = next_comma + 1;
-        } else {
+        }
+        else
+        {
             current = NULL;
         }
     }
@@ -75,26 +84,29 @@ int tokenize_sentence(char *buffer, char **tokens, int max_tokens) {
 }
 
 // --- Parser Submodule: GNRMC (lat/lon/speed/fix) ---
-void parse_sub_gnrmc(char **tokens, int token_count, GNSS_Data *gnss) {
-    if (token_count < 10) return;
-    char *status  = tokens[2];
+void parse_sub_gnrmc(char **tokens, int token_count, GNSS_Data *gnss)
+{
+    if (token_count < 10)
+        return;
+    char *status = tokens[2];
     char *lat_val = tokens[3];
     char *lat_dir = tokens[4];
     char *lon_val = tokens[5];
     char *lon_dir = tokens[6];
-    char *speed   = tokens[7];
+    char *speed = tokens[7];
 
     gnss->has_fix = (status[0] == 'A');
     if (!gnss->has_fix)
         return;
 
-    gnss->latitude  = parse_degrees(lat_val, lat_dir[0]);
+    gnss->latitude = parse_degrees(lat_val, lat_dir[0]);
     gnss->longitude = parse_degrees(lon_val, lon_dir[0]);
     gnss->speed_kmh = (strlen(speed) > 0) ? atof(speed) * 1.852f : 0.0f;
 }
 
 // --- Parser Submodule: GNGGA (altitude) ---
-void parse_sub_gngga(char **tokens, int token_count, GNSS_Data *gnss) {
+void parse_sub_gngga(char **tokens, int token_count, GNSS_Data *gnss)
+{
     if (token_count < 10)
         return;
 
@@ -103,7 +115,8 @@ void parse_sub_gngga(char **tokens, int token_count, GNSS_Data *gnss) {
 }
 
 // --- Master Router Function ---
-bool parse_nmea_sentence(const char *sentence, GNSS_Data *gnss) {
+bool parse_nmea_sentence(const char *sentence, GNSS_Data *gnss)
+{
     char sentence_copy[128];
     memset(sentence_copy, 0, 128);
     strcpy(sentence_copy, sentence);
@@ -116,14 +129,18 @@ bool parse_nmea_sentence(const char *sentence, GNSS_Data *gnss) {
 
     char *tokens[24] = {0};
     int token_count = tokenize_sentence(buffer, tokens, 24);
-    if (token_count == 0) return false;
+    if (token_count == 0)
+        return false;
 
     char *header = tokens[0];
 
-    if (strcmp(header, "$GNRMC") == 0) {
+    if (strcmp(header, "$GNRMC") == 0)
+    {
         parse_sub_gnrmc(tokens, token_count, gnss);
         return true;
-    } else if (strcmp(header, "$GNGGA") == 0) {
+    }
+    else if (strcmp(header, "$GNGGA") == 0)
+    {
         parse_sub_gngga(tokens, token_count, gnss);
         return true;
     }
@@ -131,8 +148,8 @@ bool parse_nmea_sentence(const char *sentence, GNSS_Data *gnss) {
     return false;
 }
 
-
-void process_gps_data(char *gpsData, GNSS_Data *gnss) {
+void process_gps_data(char *gpsData, GNSS_Data *gnss)
+{
     char copy[GPS_BUF_SIZE];
     memset(copy, 0, GPS_BUF_SIZE);
     strncpy(copy, gpsData, GPS_BUF_SIZE - 1);
@@ -140,13 +157,16 @@ void process_gps_data(char *gpsData, GNSS_Data *gnss) {
     char *sentence_start = copy;
     char *sentence_end;
 
-    while ((sentence_end = strchr(sentence_start, '\n')) != NULL) {
+    while ((sentence_end = strchr(sentence_start, '\n')) != NULL)
+    {
         *sentence_end = '\0';
 
         char *r_match = strchr(sentence_start, '\r');
-        if (r_match) *r_match = '\0';
+        if (r_match)
+            *r_match = '\0';
 
-        if (strlen(sentence_start) > 0 && sentence_start[0] == '$') {
+        if (strlen(sentence_start) > 0 && sentence_start[0] == '$')
+        {
             parse_nmea_sentence(sentence_start, gnss);
         }
 

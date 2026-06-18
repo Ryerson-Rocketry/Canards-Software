@@ -1,9 +1,16 @@
-#ifndef MS5611_H_
-#define MS5611_H_
+/*
+ * barometer.h
+ *
+ *  Created on: 5 oct. 2018
+ *      Author: alex
+ */
+
+#ifndef BAROMETER_H_
+#define BAROMETER_H_
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "main.h"
+
 /**
  * @brief The oversampling rate
  * @warn an higher value means a longer conversion
@@ -71,7 +78,19 @@ extern float Barometer_getAltitude(bool calculate);
  */
 extern void Barometer_calculate();
 
-float getRelativeAltitude(float currentPressurePa);
-float getGroundPressure(void);
+/**
+ * @brief Store the ground reference pressure (Pa) used as the altitude baseline
+ *
+ * @param p the ground pressure in Pascals
+ */
 void setGroundPressure(float p);
-#endif /* MS5611_H_ */
+
+/**
+ * @brief Compute altitude (metres) relative to the stored ground pressure
+ *
+ * @param currentPressurePa the current pressure in Pascals
+ * @return altitude above the ground reference in metres
+ */
+float getRelativeAltitude(float currentPressurePa);
+
+#endif /* BAROMETER_H_ */

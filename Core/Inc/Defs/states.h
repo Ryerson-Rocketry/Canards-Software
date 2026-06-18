@@ -79,6 +79,7 @@ typedef struct __attribute__((packed))
     float position;
     float velocity;
     float pressure;
+    float temperature;
     float tiltAngle;
     float rpy[3];
     float rollError;
@@ -97,5 +98,5 @@ typedef struct
     RocketState_t estimate;
     ControlData_t control;
     SDCardDataFormat_t snapshot;
-    GpsFix_t gps;
+    // GpsFix_t gps;
 } Rocket_States_t;

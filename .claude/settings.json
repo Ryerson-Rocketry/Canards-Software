@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"c:/Users/shado.ETHAN/Programming_CAD/C/Control_Systems/Canards\" && echo \"=== IWDG reload \\(timeout\\) ===\" && grep -n \"Prescaler\\\\|Reload\" Core/Src/iwdg.c && echo \"\" && echo \"=== heartbeat task ===\" && sed -n '/void vHeartbeatTask/,/^}/p' Core/Src/freertos.c && echo \"\" && echo \"=== potential busy-wait/hang loops in sensor path ===\" && grep -rn \"while *\\(\" Core/Src/Drivers/mmc5983ma.c Core/Src/Drivers/lsm6dso32_app.c Core/Src/Drivers/ms5611.c Core/Src/Tasks/sensor.c)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\shado.ETHAN\\Programming_CAD\\C\\Control_Systems\\Canards\\Core\\Src"
+    ]
+  }
+}

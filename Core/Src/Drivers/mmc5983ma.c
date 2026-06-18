@@ -64,7 +64,7 @@ HAL_StatusTypeDef magInit(void)
     write(MAG_CTRL_REG_2, 0x00); // Manual Mode
     write(MAG_CTRL_REG_0, 0x04); // Enable Interrupts
 
-    printf("[MAG]: Initialized and Reset.\r\n");
+    // printf("[MAG]: Initialized and Reset.\r\n");
     osDelay(1);
     return HAL_OK;
 }
@@ -84,7 +84,7 @@ HAL_StatusTypeDef triggerAndWait(SemaphoreHandle_t sem)
     // 3. Wait for DRDY Semaphore
     if (xSemaphoreTake(sem, pdMS_TO_TICKS(200)) != pdTRUE)
     {
-        printf("[DEBUG]: Semaphore Timeout\r\n");
+        // printf("[DEBUG]: Semaphore Timeout\r\n");
         return HAL_TIMEOUT;
     }
 
@@ -144,7 +144,7 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magD
     {
         if (out1[i] == out2[i])
         {
-            printf("[CRITICAL]: out1[%d] and out2[%d] are identical (%lu)\r\n", i, i, out1[i]);
+            // printf("[CRITICAL]: out1[%d] and out2[%d] are identical (%lu)\r\n", i, i, out1[i]);
         }
         magData[i] = ((float)((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f) / 16384.0f;
     }

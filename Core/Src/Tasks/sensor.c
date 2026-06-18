@@ -1,5 +1,6 @@
 #include "Tasks/sensor.h"
 #include "FreeRTOS.h"
+#include "spi.h"
 #include "Drivers/ms5611.h"
 #include "Drivers/lsm6dso32_app.h"
 #include "Drivers/mmc5983ma.h"
@@ -32,7 +33,13 @@ void sensor_HardwareInit()
 {
     magInit();
     LSM6DSO32_Rocket_Init(&hspi1);
-    Barometer_init();
+
+    if (xSemaphoreTake(gSpi2Mutex, portMAX_DELAY) == pdTRUE)
+    {
+        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+        Barometer_init();
+        xSemaphoreGive(gSpi2Mutex);
+    }
 
     osDelay(1000);
 
@@ -52,6 +59,7 @@ void sensor_ReadBarometer(void)
 {
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
     {
+        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
         int32_t p_mbar_x100 = Barometer_getPressure(true);
         int32_t t_centiC = Barometer_getTemp(false);
 

@@ -7,7 +7,6 @@
 #include "semphr.h"
 #include <stdbool.h>
 
-
 #define GPS_CS_PORT GPIOC
 #define GPS_CS_PIN GPIO_PIN_14
 #define GPS_BUF_SIZE 128
@@ -15,15 +14,14 @@
 #ifndef GPS_H
 #define GPS_H
 // Intermediate parsing struct — only the fields we actually write
-typedef struct {
-    bool   has_fix;     // $GNRMC status == 'A'
-    double latitude;    // $GNRMC
-    double longitude;   // $GNRMC
-    float  altitude_m;  // $GNGGA
-    float  speed_kmh;   // $GNRMC
+typedef struct
+{
+    bool has_fix;     // $GNRMC status == 'A'
+    double latitude;  // $GNRMC
+    double longitude; // $GNRMC
+    float altitude_m; // $GNGGA
+    float speed_kmh;  // $GNRMC
 } GNSS_Data;
-
-
 
 static const uint8_t cfg_spiprot[] = {
     0xB5, 0x62, 0x06, 0x8A, 0x18, 0x00,

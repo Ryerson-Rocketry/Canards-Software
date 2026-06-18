@@ -26,14 +26,14 @@
 #include "i2c.h"
 #include "Drivers/ms5611.h"
 #include "attitude_estimation_wrapper.h"
-// #include "Utils/i2c_scanner.h"
 #include "queue.h"
 #include <string.h>
-#include "rfm69.h"
+// #include "rfm69.h"
 #include "Tasks/sensor.h"
 #include "Tasks/sdcard.h"
 #include "Tasks/launchDet.h"
-#include "Tasks/gps.h"
+// #include "Tasks/gps.h"
+#include "tim.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -53,16 +53,16 @@ osThreadId_t altEstTaskHandle;
 osThreadId_t oriEstTaskHandle;
 osThreadId_t launchDetTaskHandle;
 osThreadId_t dataStoreTaskHandle;
-osThreadId_t gpsRetrieveTaskHandle;
+// osThreadId_t gpsRetrieveTaskHandle;
 // osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
 osThreadId_t gpsTaskHandle;
 
-QueueHandle_t radioQueueHandle;
+// QueueHandle_t radioQueueHandle;
 
 // struct data handle init
-Rocket_States_t Rocket = {.flightState = STATE_CANARDS_ACTIVATE};
+Rocket_States_t Rocket = {.flightState = STATE_PAD};
 
 // watchdog task flags
 volatile bool readSensorTask = false;
@@ -72,28 +72,32 @@ volatile bool dataStoreTask = false;
 // volatile bool radioTask = false;
 volatile bool controlTask = false;
 volatile bool oriEstTask = false;
-volatile bool gpsTask = false;
+// volatile bool gpsTask = false;
 
+// Priorities follow the data pipeline (high -> low):
+//   readSensor -> launchDet -> oriEst -> altEst -> control -> dataStore -> heartbeat
+// so each stage preempts and runs as soon as its input is ready. Heartbeat is lowest
+// on purpose: the IWDG only gets refreshed when every real task is idle/healthy.
 const osThreadAttr_t readSensorTask_attributes = {
-    .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal6};
+    .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal7};
 const osThreadAttr_t altEstTask_attributes = {
     .name = "altTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
-    .name = "attitudeTask", .stack_size = 1024 * 16, .priority = osPriorityAboveNormal3};
+    .name = "attitudeTask", .stack_size = 1024 * 16, .priority = osPriorityAboveNormal5};
 const osThreadAttr_t launchDetTask_attributes = {
-    .name = "launchTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal2};
+    .name = "launchTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
 const osThreadAttr_t dataStoreTask_attributes = {
     .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
-    .name = "controlCanards", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal4};
+    .name = "controlCanards", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
 // const osThreadAttr_t radiotask_attributes = {
 //     .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
-const osThreadAttr_t gps_attributes = {
-    .name = "gpsTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
+// const osThreadAttr_t gps_attributes = {
+//     .name = "gpsTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
 
-void vGpsTask(void *argument);
+// void vGpsTask(void *argument);
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
 void vOriEstTask(void *argument);
@@ -127,55 +131,47 @@ void MX_FREERTOS_Init(void)
   dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
   controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
   // radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
-  gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
+  // gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
   heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
-
-  printf("[INIT] tasks: r=%p a=%p o=%p l=%p d=%p c=%p h=%p\r\n",
-         (void *)readSensorTaskHandle, (void *)altEstTaskHandle, (void *)oriEstTaskHandle,
-         (void *)launchDetTaskHandle, (void *)dataStoreTaskHandle, (void *)controlTaskHandle,
-         (void *)heartbeatTaskHandle);
-  if (!dataStoreTaskHandle)
-    printf("[INIT] ERROR: dataStoreTask not created (heap?)\r\n");
 }
 
-void vGpsTask(void *argument)
-{
-  static uint8_t dummy_tx[GPS_BUF_SIZE];
-  memset(dummy_tx, 0xFF, sizeof(dummy_tx));
-  uint8_t gpsData[GPS_BUF_SIZE];
-
-  GNSS_Data vehicle_gps;
-  memset(&vehicle_gps, 0, sizeof(GNSS_Data));
-
-  CS_HIGH();
-  vTaskDelay(pdMS_TO_TICKS(1500));
-
-  // only used for setting up the gps
-  // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
-  // vTaskDelay(pdMS_TO_TICKS(500));
-  // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
-  // vTaskDelay(pdMS_TO_TICKS(500));
-
-  for (;;)
-  {
-    gpsRead(gSpi2Mutex, gpsData, dummy_tx);
-    process_gps_data((char *)gpsData, &vehicle_gps);
-
-    taskENTER_CRITICAL();
-    Rocket.gps.has_fix = vehicle_gps.has_fix;
-    Rocket.gps.latitude = vehicle_gps.latitude;
-    Rocket.gps.longitude = vehicle_gps.longitude;
-    Rocket.gps.altitude_m = vehicle_gps.altitude_m;
-    Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
-    taskEXIT_CRITICAL();
-
-    osDelay(200);
-    gpsTask = true;
-  }
-}
+// void vGpsTask(void *argument)
+// {
+//   static uint8_t dummy_tx[GPS_BUF_SIZE];
+//   memset(dummy_tx, 0xFF, sizeof(dummy_tx));
+//   uint8_t gpsData[GPS_BUF_SIZE];
+//   GNSS_Data vehicle_gps;
+//   memset(&vehicle_gps, 0, sizeof(GNSS_Data));
+//   CS_HIGH();
+//   vTaskDelay(pdMS_TO_TICKS(1500));
+//   // // only used for setting up the gps
+//   // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
+//   // vTaskDelay(pdMS_TO_TICKS(500));
+//   // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
+//   // vTaskDelay(pdMS_TO_TICKS(500));
+//   for (;;)
+//   {
+//     gpsRead(gSpi2Mutex, gpsData, dummy_tx);
+//     process_gps_data((char *)gpsData, &vehicle_gps);
+//     if (vehicle_gps.has_fix == 1)
+//     {
+//       HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
+//     }
+//     taskENTER_CRITICAL();
+//     Rocket.gps.has_fix = vehicle_gps.has_fix;
+//     Rocket.gps.latitude = vehicle_gps.latitude;
+//     Rocket.gps.longitude = vehicle_gps.longitude;
+//     Rocket.gps.altitude_m = vehicle_gps.altitude_m;
+//     Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
+//     taskEXIT_CRITICAL();
+//     osDelay(1000);
+//     gpsTask = true;
+//   }
+// }
 
 void vReadSensorTask(void *argument)
 {
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
   sensor_HardwareInit();
 
   for (;;)
@@ -197,8 +193,6 @@ void vReadSensorTask(void *argument)
     sensor_GroundReference();
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
-
     readSensorTask = true;
     osDelay(10);
   }
@@ -293,8 +287,16 @@ void vOriEstTask(void *argument)
       dt = 0.1f;
     AttitudeEstimation_setDt(attitudeEstimationHandle, dt);
 
+    // Accel frame fix: roll & pitch came out anti-correlated with gravity because the
+    // accelerometer X/Y axes are 180 deg about Z relative to the estimator body frame.
+    // Negate X and Y (NOT Z, so gravity magnitude and the altitude KF's accel[2] use stay intact).
+    float accelCorr[3] = {
+        -Rocket.rawData.accel[0],
+        -Rocket.rawData.accel[1],
+        Rocket.rawData.accel[2]};
+
     AttitudeEstimation_predict(attitudeEstimationHandle, Rocket.rawData.gyro, attitude);
-    AttitudeEstimation_correct(attitudeEstimationHandle, Rocket.rawData.accel, Rocket.rawData.mag, attitude);
+    AttitudeEstimation_correct(attitudeEstimationHandle, accelCorr, Rocket.rawData.mag, attitude);
     AttitudeEstimation_getRPY(attitudeEstimationHandle, attitudeRPY);
 
     Rocket.estimate.rpy[0] = attitudeRPY[0];
@@ -325,14 +327,20 @@ void vLaunchDetTask(void *argument)
 
 void vDataStoreTask(void *argument)
 {
-  uint8_t len;
+  int len; // must hold the full row length (~294 B); a uint8_t would wrap at 256 and truncate the SD write
   bool sdInitialized = DataStore_SDCardInit();
-  radioQueueHandle = xQueueCreate(1, 128); // 128 is the size of csvBuffer
+  // radioQueueHandle = xQueueCreate(1, CSV_BUFFER_SIZE); // item size must match csvBuffer so the full row isn't truncated
 
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     dataStoreTask = true; // always set flag first — SD ops below must not block WDG
+
+    // if (Rocket.flightState == STATE_PAD)
+    // {
+    //   dataStoreTask = true;
+    //   continue;
+    // }
 
     if (!sdInitialized)
     {
@@ -343,7 +351,6 @@ void vDataStoreTask(void *argument)
     len = DataStore_WriteToCSV();
 
     DataStore_WriteToSDCard(len);
-    send_to_radio();
   }
 }
 
@@ -353,25 +360,26 @@ void vControlTask(void *argument)
   float rollError = 0;
   static float integral = 0;
   float derivative, output = 0;
-  uint32_t activationStartTime = 0;
-  bool startTimeCaptured = false;
   float pitchSetPoint = 0.0f;
+
+  // On startup: power the servo and drive it to center, holding long enough
+  // for it to physically reach the middle before the control loop begins.
+  HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_SET);
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, SERVO_CENTER_US);
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, SERVO_CENTER_US);
+  for (uint32_t t = 0; t < 500; t += 20)
+  {
+    controlTask = true; // keep the watchdog fed while the servo travels
+    osDelay(20);
+  }
 
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    // NOTE: MUST CHANGE TO == STATE_CANARDS_ACTIVATE WHILE FLYING ROCKET
     if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
     {
-      if (!startTimeCaptured)
-      {
-        activationStartTime = osKernelGetTickCount();
-        startTimeCaptured = true;
-        integral = 0;
-      }
-
-      uint32_t elapsedMillis = osKernelGetTickCount() - activationStartTime;
+      uint32_t elapsedMillis = osKernelGetTickCount();
 
       if ((elapsedMillis % 10000) < 5000)
       {
@@ -382,30 +390,36 @@ void vControlTask(void *argument)
         setPoint = 90.0f;
       }
 
-      rollError = setPoint - Rocket.estimate.rpy[0];
+      // Roll = spin about the longitudinal (Z/nose) axis = estimator yaw (rpy[2]).
+      rollError = setPoint - Rocket.estimate.rpy[2];
       Rocket.control.rollError = rollError;
       Rocket.control.setPoint = setPoint;
       Rocket.control.pitchError = pitchSetPoint - Rocket.estimate.rpy[1];
 
       if (fabsf(Rocket.control.pitchError) > 30)
       {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+        // Off-nominal pitch: cut servo power and skip actuation.
+        HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_RESET);
         controlTask = true;
         continue;
       }
+
+      // Canards active and pitch in range: power the servo.
+      HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_SET);
 
       if (fabsf(output) < 20.0f)
       {
         integral += rollError * 0.01f;
       }
 
-      derivative = Rocket.rawData.gyro[0];
+      derivative = Rocket.rawData.gyro[2]; // spin rate about the Z/nose axis
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
       Rocket.control.pwmAngle = moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
     }
     else
     {
-      startTimeCaptured = false;
+      // Not in the canards phase: keep the servo unpowered.
+      HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_RESET);
       setPoint = 0.0f;
       integral = 0;
       output = 0;
@@ -414,6 +428,32 @@ void vControlTask(void *argument)
     controlTask = true;
   }
 }
+
+// void vRadioTask(void *argument)
+// {
+//   char csvBufferReceived[128];
+//   char sendingBuffer[128];
+//   memset(sendingBuffer, 0, sizeof(sendingBuffer));
+//   for (;;)
+//   {
+//     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+//     if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
+//     {
+//       if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+//       {
+//         strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
+//         sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
+//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t *)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
+//         {
+//           printf("I2C transmission 1 to ESP32 failed\r\n");
+//         }
+//         memset(sendingBuffer, 0, sizeof(sendingBuffer));
+//       }
+//       xSemaphoreGive(gI2c1Mutex);
+//     }
+//     radioTask = true;
+//   }
+// }
 
 void vHeartbeatTask(void *argument)
 {
@@ -424,51 +464,17 @@ void vHeartbeatTask(void *argument)
     if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && controlTask && oriEstTask)
     {
       HAL_IWDG_Refresh(&hiwdg);
+      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
       readSensorTask = false;
       altEstTask = false;
       launchDetTask = false;
       dataStoreTask = false;
       controlTask = false;
-      // radioTask = false;
       oriEstTask = false;
-    }
-    else
-    {
-      printf("WDG: r=%d l=%d a=%d o=%d c=%d d=%d\r\n",
-             readSensorTask, launchDetTask, altEstTask, oriEstTask, controlTask, dataStoreTask);
     }
     osDelay(pdMS_TO_TICKS(100));
   }
 }
-
-// void vRadioTask(void *argument)
-// {
-//   char csvBufferReceived[128];
-//   char sendingBuffer[128];
-//   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//   // i2cScanner();
-
-//   for (;;)
-//   {
-//     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-//     if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
-//     {
-//       if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-//       {
-//         strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
-//         sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t*)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
-//         {
-//           printf("I2C transmission 1 to ESP32 failed\r\n");
-//         }
-//         memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//       }
-//       xSemaphoreGive(gI2c1Mutex);
-//     }
-
-//     radioTask = true;
-//   }
-// }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
