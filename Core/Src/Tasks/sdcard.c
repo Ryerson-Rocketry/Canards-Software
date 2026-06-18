@@ -37,32 +37,32 @@ UINT bytesWritten;
 bool DataStore_SDCardInit(void)
 {
     bool cardPresent = (HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin) == GPIO_PIN_RESET);
-    printf("[SD] card detect pin=%d present=%d\r\n",
-           HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
+    // printf("[SD] card detect pin=%d present=%d\r\n",
+    //        HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
 
     if (!cardPresent)
     {
-        printf("[SD] No card detected. Skipping SD interface.\r\n");
+        // printf("[SD] No card detected. Skipping SD interface.\r\n");
         sdInitialized = false;
         return false;
     }
 
     if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
     {
-        printf("[SD] Mount failed.\r\n");
+        // printf("[SD] Mount failed.\r\n");
         sdInitialized = false;
         return false;
     }
 
-    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_OPEN_APPEND | FA_WRITE) != FR_OK)
+    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
     {
-        printf("[SD] Open failed.\r\n");
+        // printf("[SD] Open failed.\r\n");
         sdInitialized = false;
         return false;
     }
 
     sdInitialized = true;
-    printf("[SD] ready\r\n");
+    // printf("[SD] ready\r\n");
 
     // Only write the header on a fresh file; an existing file just gets appended to.
     if (f_size(&SDFile) == 0)

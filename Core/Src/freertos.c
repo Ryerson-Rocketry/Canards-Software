@@ -33,6 +33,7 @@
 #include "Tasks/sdcard.h"
 #include "Tasks/launchDet.h"
 // #include "Tasks/gps.h"
+#include "tim.h"
 
 extern FATFS SDFatFS;
 extern FIL SDFile;
@@ -73,18 +74,22 @@ volatile bool controlTask = false;
 volatile bool oriEstTask = false;
 // volatile bool gpsTask = false;
 
+// Priorities follow the data pipeline (high -> low):
+//   readSensor -> launchDet -> oriEst -> altEst -> control -> dataStore -> heartbeat
+// so each stage preempts and runs as soon as its input is ready. Heartbeat is lowest
+// on purpose: the IWDG only gets refreshed when every real task is idle/healthy.
 const osThreadAttr_t readSensorTask_attributes = {
-    .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal6};
+    .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal7};
 const osThreadAttr_t altEstTask_attributes = {
     .name = "altTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
-    .name = "attitudeTask", .stack_size = 1024 * 16, .priority = osPriorityAboveNormal3};
+    .name = "attitudeTask", .stack_size = 1024 * 16, .priority = osPriorityAboveNormal5};
 const osThreadAttr_t launchDetTask_attributes = {
-    .name = "launchTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal2};
+    .name = "launchTask", .stack_size = 1024 * 2, .priority = osPriorityAboveNormal6};
 const osThreadAttr_t dataStoreTask_attributes = {
     .name = "storeTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal1};
 const osThreadAttr_t controlTask_attributes = {
-    .name = "controlCanards", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal4};
+    .name = "controlCanards", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
 // const osThreadAttr_t radiotask_attributes = {
@@ -135,29 +140,23 @@ void MX_FREERTOS_Init(void)
 //   static uint8_t dummy_tx[GPS_BUF_SIZE];
 //   memset(dummy_tx, 0xFF, sizeof(dummy_tx));
 //   uint8_t gpsData[GPS_BUF_SIZE];
-
 //   GNSS_Data vehicle_gps;
 //   memset(&vehicle_gps, 0, sizeof(GNSS_Data));
-
 //   CS_HIGH();
 //   vTaskDelay(pdMS_TO_TICKS(1500));
-
 //   // // only used for setting up the gps
 //   // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
 //   // vTaskDelay(pdMS_TO_TICKS(500));
 //   // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
 //   // vTaskDelay(pdMS_TO_TICKS(500));
-
 //   for (;;)
 //   {
 //     gpsRead(gSpi2Mutex, gpsData, dummy_tx);
 //     process_gps_data((char *)gpsData, &vehicle_gps);
-
 //     if (vehicle_gps.has_fix == 1)
 //     {
 //       HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
 //     }
-
 //     taskENTER_CRITICAL();
 //     Rocket.gps.has_fix = vehicle_gps.has_fix;
 //     Rocket.gps.latitude = vehicle_gps.latitude;
@@ -165,7 +164,6 @@ void MX_FREERTOS_Init(void)
 //     Rocket.gps.altitude_m = vehicle_gps.altitude_m;
 //     Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
 //     taskEXIT_CRITICAL();
-
 //     osDelay(1000);
 //     gpsTask = true;
 //   }
@@ -338,11 +336,11 @@ void vDataStoreTask(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     dataStoreTask = true; // always set flag first — SD ops below must not block WDG
 
-    if (Rocket.flightState == STATE_PAD)
-    {
-      dataStoreTask = true;
-      continue;
-    }
+    // if (Rocket.flightState == STATE_PAD)
+    // {
+    //   dataStoreTask = true;
+    //   continue;
+    // }
 
     if (!sdInitialized)
     {
@@ -353,7 +351,6 @@ void vDataStoreTask(void *argument)
     len = DataStore_WriteToCSV();
 
     DataStore_WriteToSDCard(len);
-    // send_to_radio();
   }
 }
 
@@ -364,6 +361,17 @@ void vControlTask(void *argument)
   static float integral = 0;
   float derivative, output = 0;
   float pitchSetPoint = 0.0f;
+
+  // On startup: power the servo and drive it to center, holding long enough
+  // for it to physically reach the middle before the control loop begins.
+  HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_SET);
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, SERVO_CENTER_US);
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, SERVO_CENTER_US);
+  for (uint32_t t = 0; t < 500; t += 20)
+  {
+    controlTask = true; // keep the watchdog fed while the servo travels
+    osDelay(20);
+  }
 
   for (;;)
   {
@@ -382,29 +390,36 @@ void vControlTask(void *argument)
         setPoint = 90.0f;
       }
 
-      rollError = setPoint - Rocket.estimate.rpy[0];
+      // Roll = spin about the longitudinal (Z/nose) axis = estimator yaw (rpy[2]).
+      rollError = setPoint - Rocket.estimate.rpy[2];
       Rocket.control.rollError = rollError;
       Rocket.control.setPoint = setPoint;
       Rocket.control.pitchError = pitchSetPoint - Rocket.estimate.rpy[1];
 
       if (fabsf(Rocket.control.pitchError) > 30)
       {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+        // Off-nominal pitch: cut servo power and skip actuation.
+        HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_RESET);
         controlTask = true;
         continue;
       }
+
+      // Canards active and pitch in range: power the servo.
+      HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_SET);
 
       if (fabsf(output) < 20.0f)
       {
         integral += rollError * 0.01f;
       }
 
-      derivative = Rocket.rawData.gyro[0];
+      derivative = Rocket.rawData.gyro[2]; // spin rate about the Z/nose axis
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
       Rocket.control.pwmAngle = moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
     }
     else
     {
+      // Not in the canards phase: keep the servo unpowered.
+      HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_RESET);
       setPoint = 0.0f;
       integral = 0;
       output = 0;
@@ -419,7 +434,6 @@ void vControlTask(void *argument)
 //   char csvBufferReceived[128];
 //   char sendingBuffer[128];
 //   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-
 //   for (;;)
 //   {
 //     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -437,7 +451,6 @@ void vControlTask(void *argument)
 //       }
 //       xSemaphoreGive(gI2c1Mutex);
 //     }
-
 //     radioTask = true;
 //   }
 // }
