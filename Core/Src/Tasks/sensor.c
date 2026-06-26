@@ -38,6 +38,7 @@ void sensor_HardwareInit()
     {
         SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
         Barometer_init();
+        Barometer_setOSR(OSR_1024);
         xSemaphoreGive(gSpi2Mutex);
     }
 

@@ -336,11 +336,11 @@ void vDataStoreTask(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     dataStoreTask = true; // always set flag first — SD ops below must not block WDG
 
-    // if (Rocket.flightState == STATE_PAD)
-    // {
-    //   dataStoreTask = true;
-    //   continue;
-    // }
+    if (Rocket.flightState == STATE_PAD)
+    {
+      dataStoreTask = true;
+      continue;
+    }
 
     if (!sdInitialized)
     {
@@ -414,6 +414,7 @@ void vControlTask(void *argument)
 
       derivative = Rocket.rawData.gyro[2]; // spin rate about the Z/nose axis
       output = (Kp * rollError) + (Ki * integral) - (Kd * derivative);
+
       Rocket.control.pwmAngle = moveServo(output, Rocket.estimate.velocity, Rocket.rawData.pressure);
     }
     else

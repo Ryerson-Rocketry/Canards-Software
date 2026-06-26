@@ -33,10 +33,10 @@ static uint32_t sustainer_ignition_start = 0;
 
 uint32_t elapsed_time = 0;
 
-// const float LIFTOFF_ACCEL = 109.462824f;
-// const float LIFTOFF_G = 11.15f;
-const float LIFTOFF_G = 1.0f;
-const float LIFTOFF_ACCEL = 2.0f * 9.81f;
+const float LIFTOFF_ACCEL = 109.462824f;
+const float LIFTOFF_G = 11.15f;
+// const float LIFTOFF_G = 1.0f;
+// const float LIFTOFF_ACCEL = 1.0f * 9.81f;
 const float BOOSTER_BURNOUT_TIME = 4500.0f;
 const float STAGE_SEPARATION_TIME = 1000.0f;
 const float SUSTAINER_IGNITION = 1000.0f;
@@ -65,7 +65,7 @@ void state_pad(uint32_t now)
       threshold_active = true;
     }
 
-    if ((now - accel_start_time) >= pdMS_TO_TICKS(100))
+    if ((now - accel_start_time) >= pdMS_TO_TICKS(10))
     {
       booster_burnout_start = now;
       Rocket.flightState = STATE_BOOSTER_BURNOUT;
@@ -115,12 +115,21 @@ void state_sustainer_ignition(uint32_t now)
 
 void state_canards_activate()
 {
+  static bool reached_speed = false;
+
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
 
-  // if (Rocket.estimate.velocity <= 50.0f)
-  // {
-  //   Rocket.flightState = STATE_DESCENT;
-  // }
+  // Latch on a high speed first, so a low/garbage velocity reading at activation
+  // can't immediately disarm. Only a genuine decay back through 50 m/s descends.
+  if (Rocket.estimate.velocity > 50.0f)
+  {
+    reached_speed = true;
+  }
+
+  if (reached_speed && Rocket.estimate.velocity <= 50.0f)
+  {
+    Rocket.flightState = STATE_DESCENT;
+  }
 }
 
 void checkFlightState()
