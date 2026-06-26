@@ -78,8 +78,8 @@ HAL_StatusTypeDef LSM6DSO32_Rocket_Init(SPI_HandleTypeDef *hspi)
     lsm6dso32_xl_full_scale_set(&dev_ctx, LSM6DSO32_16g);
     lsm6dso32_gy_full_scale_set(&dev_ctx, LSM6DSO32_2000dps);
 
-    lsm6dso32_xl_data_rate_set(&dev_ctx, LSM6DSO32_XL_ODR_104Hz_NORMAL_MD);
-    lsm6dso32_gy_data_rate_set(&dev_ctx, LSM6DSO32_GY_ODR_104Hz_NORMAL_MD);
+    lsm6dso32_xl_data_rate_set(&dev_ctx, LSM6DSO32_XL_ODR_417Hz_HIGH_PERF);
+    lsm6dso32_gy_data_rate_set(&dev_ctx, LSM6DSO32_GY_ODR_417Hz_HIGH_PERF);
 
     /* Interrupt Routing */
     lsm6dso32_pin_int1_route_t int1_route = {0};

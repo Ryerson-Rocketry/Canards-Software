@@ -17,6 +17,12 @@ private:
     Eigen::Matrix<float, 6,1> Z;
     Eigen::Matrix<float, 6, 6> measurementNoiseCov;
 
+    // World-frame magnetic reference, auto-calibrated from the sensor at startup
+    // (rocket vertical on the pad) instead of being hardcoded to (1,0,0). See
+    // attitudeCorrection.
+    Eigen::Vector3f magReference;
+    bool magRefInitialized;
+
     Eigen::Matrix4f Omega();
     Eigen::Vector4f discretization();
     Eigen::Matrix4f getStateErrorCovariance();

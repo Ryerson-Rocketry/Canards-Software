@@ -16,10 +16,14 @@ AttitudeEstimation::AttitudeEstimation(/* args */)
     this->F = Eigen::Matrix4f::Zero();
     this->stateErrorCov = Eigen::Matrix4f::Identity();
 
-    this->gyroNoiseSigma = 0.01f; 
+    this->gyroNoiseSigma = 0.01f;
     this->measurementNoiseCov = Eigen::Matrix<float, 6, 6>::Identity();
     this->measurementNoiseCov.block<3,3>(0,0) *= 0.1f;  // accel noise
     this->measurementNoiseCov.block<3,3>(3,3) *= 0.5f;  // mag noise
+
+    // Fallback until the real field direction is captured on the first correction.
+    this->magReference = Eigen::Vector3f(1.0f, 0.0f, 0.0f);
+    this->magRefInitialized = false;
 }
 
 AttitudeEstimation::~AttitudeEstimation()
@@ -99,6 +103,15 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
         mag_n[0] = mag_array[0]/mag_norm;
         mag_n[1] = mag_array[1]/mag_norm;
         mag_n[2] = mag_array[2]/mag_norm;
+
+        // First valid mag reading defines the world-frame field reference. The
+        // rocket is vertical on the pad and the quaternion is still ~identity, so
+        // body frame ~= world frame here -> this captures the TRUE field direction
+        // (including the local dip) instead of the hardcoded horizontal (1,0,0).
+        if (!magRefInitialized) {
+            this->magReference = Eigen::Vector3f(mag_n[0], mag_n[1], mag_n[2]);
+            this->magRefInitialized = true;
+        }
     }
 
     float accel_norm = sqrtf(accel_array[0]*accel_array[0] + accel_array[1]*accel_array[1] + accel_array[2]*accel_array[2]);
@@ -111,8 +124,8 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
     this->Z << accel_n[0], accel_n[1], accel_n[2],
             mag_n[0],   mag_n[1],   mag_n[2];
 
-    Eigen::Vector3f g(0.0f, 0.0f, 1.0f); 
-    Eigen::Vector3f r(1.0f, 0.0f, 0.0f);
+    Eigen::Vector3f g(0.0f, 0.0f, 1.0f);
+    Eigen::Vector3f r = this->magReference;  // auto-calibrated field dir, not (1,0,0)
 
     // Extract quaternion parts
     float qw = attitude[0];

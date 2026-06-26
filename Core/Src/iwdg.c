@@ -39,7 +39,7 @@ void MX_IWDG_Init(void)
   /* USER CODE END IWDG_Init 1 */
   hiwdg.Instance = IWDG;
   hiwdg.Init.Prescaler = IWDG_PRESCALER_256;
-  hiwdg.Init.Reload = 4095;
+  hiwdg.Init.Reload = 624; // ~5 s: (624+1) * 256 / 32 kHz LSI
   if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
   {
     Error_Handler();

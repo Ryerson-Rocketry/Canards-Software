@@ -12,6 +12,14 @@ extern SemaphoreHandle_t gI2c1Mutex;
 // Standard 18-bit midpoint
 #define MAG_OFFSET_18BIT 131072.0f
 
+/* ---------------------------------------------------------------------------
+ * Hard-iron calibration offset (same units as magData[], i.e. Gauss).
+ * Default {0,0,0} = no correction. Get real values from a tumble log with
+ * tools/mag_calibrate.py, paste them here, and reflash.
+ * Collect the tumble while this is still {0,0,0} so the fit sees raw data.
+ * ------------------------------------------------------------------------- */
+static const float MAG_HARD_IRON[3] = {-0.161649f, -0.538105f, 1.345655f};
+
 /**
  * @brief Low-level I2C write.
  */
@@ -148,6 +156,10 @@ HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magD
         }
         magData[i] = ((float)((int32_t)out1[i] - (int32_t)out2[i]) / 2.0f) / 16384.0f;
     }
+
+    // --- PHASE 4: HARD-IRON CORRECTION ---
+    for (int i = 0; i < 3; i++)
+        magData[i] -= MAG_HARD_IRON[i];
 
     return HAL_OK;
 }
