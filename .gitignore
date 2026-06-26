@@ -41,6 +41,12 @@ _deps/
 *.d
 *.o
 *.su
+.claude
+./claude
+claude
+*.claude
+*./claude
+
 
 # --- Windows System Files ---
 # Ignore standard Windows hidden files
