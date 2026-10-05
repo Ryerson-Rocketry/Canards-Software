@@ -48,7 +48,7 @@ double parse_degrees(const char *raw_val, char direction)
 {
     if (strlen(raw_val) == 0)
         return 0.0;
-    double raw_num = atof(raw_val);
+    float raw_num = atof(raw_val);
     int degrees = (int)(raw_num / 100);
     double minutes = raw_num - (degrees * 100);
     double decimal_degrees = degrees + (minutes / 60.0);

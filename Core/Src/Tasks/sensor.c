@@ -31,7 +31,6 @@ const float alpha_gyro = 0.2f;
 
 void sensor_HardwareInit()
 {
-    magInit();
     LSM6DSO32_Rocket_Init(&hspi1);
 
     if (xSemaphoreTake(gSpi2Mutex, portMAX_DELAY) == pdTRUE)
@@ -50,9 +49,11 @@ void sensor_HardwareInit()
 }
 
 // I2C1: Magnetometer
-void sensor_ReadMagnetometer(void)
-{
+void sensor_ReadMagnetometer(void){
+  if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
+  
+  xSemaphoreGive(gI2c1Mutex);
 }
 
 // SPI2: Barometer

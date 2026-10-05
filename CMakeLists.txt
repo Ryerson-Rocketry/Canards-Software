@@ -60,8 +60,7 @@ add_subdirectory(cmake/stm32cubemx)
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
-# Find the Eigen package
-set(Eigen3_DIR "C:/msys64/mingw64/share/eigen3/cmake")
+# Find Eigen from the active toolchain/environment.
 find_package(Eigen3 REQUIRED)
 
 

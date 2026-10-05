@@ -49,6 +49,7 @@ SemaphoreHandle_t gSpi1Mutex;
 SemaphoreHandle_t gSpi2Mutex;
 
 osThreadId_t readSensorTaskHandle;
+osTheadId_t  readMagnetometerTaskHandle;
 osThreadId_t altEstTaskHandle;
 osThreadId_t oriEstTaskHandle;
 osThreadId_t launchDetTaskHandle;
@@ -66,6 +67,7 @@ Rocket_States_t Rocket = {.flightState = STATE_PAD};
 
 // watchdog task flags
 volatile bool readSensorTask = false;
+volatile bool readMagnetometerTask = false;
 volatile bool altEstTask = false;
 volatile bool launchDetTask = false;
 volatile bool dataStoreTask = false;
@@ -79,7 +81,9 @@ volatile bool oriEstTask = false;
 // so each stage preempts and runs as soon as its input is ready. Heartbeat is lowest
 // on purpose: the IWDG only gets refreshed when every real task is idle/healthy.
 const osThreadAttr_t readSensorTask_attributes = {
-    .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal7};
+    .name = "readSensorTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal6};
+const osThreadAttr_t readMagnetometerTask_attributes = {
+    .name = "readMagnetometerTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal6};
 const osThreadAttr_t altEstTask_attributes = {
     .name = "altTask", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal4};
 const osThreadAttr_t oriEstTask_attributes = {
@@ -99,6 +103,7 @@ const osThreadAttr_t heartbeat_attributes = {
 
 // void vGpsTask(void *argument);
 void vReadSensorTask(void *argument);
+void vReadMagnetometerTask(void *argument);
 void vAltEstTask(void *argument);
 void vOriEstTask(void *argument);
 void vLaunchDetTask(void *argument);
@@ -125,6 +130,7 @@ void MX_FREERTOS_Init(void)
   configASSERT(xImuGyroReadySemaphore);
 
   readSensorTaskHandle = osThreadNew(vReadSensorTask, NULL, &readSensorTask_attributes);
+  readMagnetometerTaskHandle = osThreadNew(vReadMagnetometerTask, NULL, &readMagnetometerTask_attributes);
   altEstTaskHandle = osThreadNew(vAltEstTask, NULL, &altEstTask_attributes);
   oriEstTaskHandle = osThreadNew(vOriEstTask, NULL, &oriEstTask_attributes);
   launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
@@ -176,9 +182,6 @@ void vReadSensorTask(void *argument)
 
   for (;;)
   {
-    // I2C1: Magnetometer
-    sensor_ReadMagnetometer();
-
     // SPI2: Barometer
     sensor_ReadBarometer();
 
@@ -195,6 +198,18 @@ void vReadSensorTask(void *argument)
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     readSensorTask = true;
     osDelay(10);
+  }
+}
+
+void vReadMagnetometerTask(void *argument)
+{
+  magInit();
+  for (;;)
+  {
+    // I2C1: Magnetometer
+    sensor_ReadMagnetometer();
+    readMagnetometerTask = true;
+    osDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -462,11 +477,12 @@ void vHeartbeatTask(void *argument)
   {
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
-    if (readSensorTask && altEstTask && launchDetTask && dataStoreTask && controlTask && oriEstTask)
+    if (readSensorTask && readMagnetometerTask && altEstTask && launchDetTask && dataStoreTask && controlTask && oriEstTask)
     {
       HAL_IWDG_Refresh(&hiwdg);
       HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
       readSensorTask = false;
+      readMagnetometerTask = false;
       altEstTask = false;
       launchDetTask = false;
       dataStoreTask = false;

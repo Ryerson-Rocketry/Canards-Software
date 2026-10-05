@@ -1,0 +1,8 @@
+services:
+  flash:
+    build:
+      context: .
+      target: final
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb

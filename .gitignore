@@ -1,6 +1,7 @@
 # --- Build Artifacts ---
 # Ignore the build directory where CMake generates files and binaries
 /[Bb]uild/
+/oldbuild/
 /bin/
 /obj/
 *.elf
