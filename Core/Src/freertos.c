@@ -209,7 +209,6 @@ void vReadMagnetometerTask(void *argument)
     // I2C1: Magnetometer
     sensor_ReadMagnetometer();
     readMagnetometerTask = true;
-    osDelay(pdMS_TO_TICKS(10));
   }
 }
 

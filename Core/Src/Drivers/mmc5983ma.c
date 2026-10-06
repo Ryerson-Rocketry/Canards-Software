@@ -34,7 +34,7 @@ HAL_StatusTypeDef read(uint8_t regAddress, uint8_t* out, int length)
 
 HAL_StatusTypeDef magInit(void){
   write(MAG_CTRL_REG_0, 0x80); // Software reset
-  osDelay(pdMS_TO_TICKS(5));
+  osDelay(pdMS_TO_TICKS(10));
 
   write(MAG_CTRL_REG_0, 0x24); // automatic set/reset mode 
   write(MAG_CTRL_REG_1, 0x03); // set bandwidth to 800Hz
