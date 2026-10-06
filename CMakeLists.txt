@@ -61,7 +61,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 # Find the Eigen package
-set(Eigen3_DIR "C:/msys64/mingw64/share/eigen3/cmake")
+#set(Eigen3_DIR "C:/msys64/mingw64/share/eigen3/cmake")
 find_package(Eigen3 REQUIRED)
 
 
@@ -80,7 +80,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Utils/i2c_scanner.c
     Core/Src/Tasks/sensor.c
     Core/Src/Tasks/sdcard.c
-    Core/Src/Tasks/LaunchDet.c
+    Core/Src/Tasks/launchDet.c
     Core/Src/Tasks/gps.c
 )
 
