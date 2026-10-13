@@ -32,6 +32,7 @@ typedef struct
     float mag[3];
     float pressure;
     float temperature;
+    bool baroHealthy; // false until the first good reading; false while readings are rejected
     uint32_t timestamp;
 } RawSensorData_t;
 
