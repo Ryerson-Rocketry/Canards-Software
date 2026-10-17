@@ -28,7 +28,7 @@ HAL_StatusTypeDef read(uint8_t regAddress, uint8_t* out, int length)
   {
     status = HAL_I2C_Mem_Read(&hi2c1, MAG_ADDRESS << 1, regAddress, 1, out, length, 100);
     xSemaphoreGive(gI2c1Mutex);
-  }
+  } 
   return status;
 }
 
@@ -38,15 +38,17 @@ HAL_StatusTypeDef magInit(void){
 
   write(MAG_CTRL_REG_0, 0x24); // automatic set/reset mode 
   write(MAG_CTRL_REG_1, 0x03); // set bandwidth to 800Hz
-  write(MAG_CTRL_REG_2, 0x00); // set mode to continuous
+  write(MAG_CTRL_REG_2, 0x00); // set mode to manual
 
   return HAL_OK;
 }
 
 HAL_StatusTypeDef triggerAndWait(SemaphoreHandle_t sem)
 {
+
+  write(MAG_CTRL_REG_0, 0x00);
   // trigger take measurement, interrupt, and automatic set/reset
-  if (write(MAG_CTRL_REG_0, 0x01 | 0x04 | 0x20) != HAL_OK)
+  if (write(MAG_CTRL_REG_0, 0x01 | 0x04 | 0x20) != HAL_OK)    
     return HAL_ERROR;
 
   // Wait for DRDY Semaphore
@@ -67,18 +69,18 @@ HAL_StatusTypeDef triggerAndWait(SemaphoreHandle_t sem)
   return HAL_OK;
 }
 
-HAL_StatusTypeDef readMagData(SemaphoreHandle_t magDataReadySemaphore, float magData[3]){
-  HAL_StatusTypeDef status = HAL_ERROR;
+
+HAL_StatusTypeDef magGetData(SemaphoreHandle_t magDataReadySemaphore, float magData[3]){
   if (triggerAndWait(magDataReadySemaphore) != HAL_OK)
     return HAL_ERROR;
   
   // read the data from the sensor, supposedly does the differential calculation internally
-  if (read(MAG_XOUT_0, (uint8_t*)magData, 7) != HAL_OK)
+  uint8_t rawBuf[7] = {0};
+  if (read(MAG_XOUT_0, rawBuf, sizeof(rawBuf)) != HAL_OK)
     return HAL_ERROR;
 
   
   // Reconstruct 18-bit unsigned integer values
-  uint8_t rawBuf[7] = {0};
   uint32_t raw_x = ((uint32_t)rawBuf[0] << 10) | ((uint32_t)rawBuf[1] << 2) | ((uint32_t)rawBuf[6] >> 6);
   uint32_t raw_y = ((uint32_t)rawBuf[2] << 10) | ((uint32_t)rawBuf[3] << 2) | ((uint32_t)(rawBuf[6] >> 4) & 0x03);
   uint32_t raw_z = ((uint32_t)rawBuf[4] << 10) | ((uint32_t)rawBuf[5] << 2) | ((uint32_t)(rawBuf[6] >> 2) & 0x03);

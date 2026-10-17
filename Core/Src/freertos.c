@@ -49,7 +49,7 @@ SemaphoreHandle_t gSpi1Mutex;
 SemaphoreHandle_t gSpi2Mutex;
 
 osThreadId_t readSensorTaskHandle;
-osTheadId_t  readMagnetometerTaskHandle;
+osThreadId_t readMagnetometerTaskHandle;
 osThreadId_t altEstTaskHandle;
 osThreadId_t oriEstTaskHandle;
 osThreadId_t launchDetTaskHandle;
@@ -197,7 +197,7 @@ void vReadSensorTask(void *argument)
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
     readSensorTask = true;
-    osDelay(10);
+    osDelay(100);
   }
 }
 
@@ -209,6 +209,7 @@ void vReadMagnetometerTask(void *argument)
     // I2C1: Magnetometer
     sensor_ReadMagnetometer();
     readMagnetometerTask = true;
+    osDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -496,11 +497,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-  if (GPIO_Pin == GPIO_PIN_3)
-  {
-    xSemaphoreGiveFromISR(xMagDataReadySemaphore, &xHigherPriorityTaskWoken);
-  }
-  else if (GPIO_Pin == GPIO_PIN_0)
+  // if (GPIO_Pin == GPIO_PIN_3)
+  // {
+  //   xSemaphoreGiveFromISR(xMagDataReadySemaphore, &xHigherPriorityTaskWoken);
+  // }
+  // else 
+  if (GPIO_Pin == GPIO_PIN_0)
   {
     xSemaphoreGiveFromISR(xImuAccelReadySemaphore, &xHigherPriorityTaskWoken);
   }

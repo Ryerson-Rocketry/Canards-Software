@@ -59,17 +59,17 @@ void sensor_ReadMagnetometer(void){
 // SPI2: Barometer
 void sensor_ReadBarometer(void)
 {
-    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
-    {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
-        int32_t p_mbar_x100 = Barometer_getPressure(true);
-        int32_t t_centiC = Barometer_getTemp(false);
+  if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
+  {
+    SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+    int32_t p_mbar_x100 = Barometer_getPressure(true);
+    int32_t t_centiC = Barometer_getTemp(false);
 
-        /* Convert units */
-        Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
-        Rocket.rawData.temperature = t_centiC / 100.0f;
-        xSemaphoreGive(gSpi2Mutex);
-    }
+    /* Convert units */
+    Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
+    Rocket.rawData.temperature = t_centiC / 100.0f;
+    xSemaphoreGive(gSpi2Mutex);
+  }
 }
 
 // SPI1: IMU - accelerometer
