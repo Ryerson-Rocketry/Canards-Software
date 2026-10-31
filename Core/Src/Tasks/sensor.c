@@ -4,6 +4,7 @@
 #include "Drivers/ms5611.h"
 #include "Drivers/lsm6dso32_app.h"
 #include "Drivers/mmc5983ma.h"
+#include "StateEstimation/altitude_estimation.h"
 #include "stm32f4xx_hal_def.h"
 #include "task.h"
 #include "semphr.h"
@@ -29,17 +30,66 @@ const float alpha_accel = 0.1f;
 static float gyro_filt[3] = {0.0f, 0.0f, 0.0f};
 const float alpha_gyro = 0.2f;
 
+// SPI2 shared with GPS: each user sets its own speed before every access. 18 MHz (chip max 20 MHz).
+#define BARO_SPI_PRESCALER SPI_BAUDRATEPRESCALER_2
+#define BARO_INIT_ATTEMPTS 3
+
+static MS5611_t baro = {
+    .hspi = &hspi2,
+    .csPort = SPI2__CS_GPIO_Port,
+    .csPin = SPI2__CS_Pin,
+    .osr = MS5611_OSR_1024,
+};
+static bool baroReady = false; // PROM read and CRC passed
+
+// Runs one barometer command on the shared SPI2 bus. Returns false if the bus
+// mutex wasn't free in time (skip this cycle — not a sensor fault).
+static bool baroBusCall(MS5611_Status_t (*cmd)(const MS5611_t *), MS5611_Status_t *status)
+{
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) != pdTRUE)
+        return false;
+    SPI2_Switch_Settings(BARO_SPI_PRESCALER, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+    *status = cmd(&baro);
+    xSemaphoreGive(gSpi2Mutex);
+    return true;
+}
+
+// Start a conversion, sleep while it runs (bus released), then read the 24-bit result.
+static bool baroConvert(MS5611_Status_t (*start)(const MS5611_t *), uint32_t *raw, MS5611_Status_t *status)
+{
+    if (!baroBusCall(start, status))
+        return false;
+    if (*status != MS5611_OK)
+        return true;
+
+    osDelay(MS5611_ConvWaitMs(&baro));
+
+    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) != pdTRUE)
+        return false;
+    SPI2_Switch_Settings(BARO_SPI_PRESCALER, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+    *status = MS5611_ReadADC(&baro, raw);
+    xSemaphoreGive(gSpi2Mutex);
+    return true;
+}
+
 void sensor_HardwareInit()
 {
     magInit();
     LSM6DSO32_Rocket_Init(&hspi1);
 
-    if (xSemaphoreTake(gSpi2Mutex, portMAX_DELAY) == pdTRUE)
+    for (int attempt = 0; attempt < BARO_INIT_ATTEMPTS && !baroReady; attempt++)
     {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
-        Barometer_init();
-        Barometer_setOSR(OSR_1024);
-        xSemaphoreGive(gSpi2Mutex);
+        MS5611_Status_t status;
+        if (!baroBusCall(MS5611_Reset, &status) || status != MS5611_OK)
+            continue;
+        osDelay(MS5611_RESET_WAIT_MS); // PROM reload, bus released
+
+        if (xSemaphoreTake(gSpi2Mutex, portMAX_DELAY) == pdTRUE)
+        {
+            SPI2_Switch_Settings(BARO_SPI_PRESCALER, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+            baroReady = (MS5611_ReadPROM(&baro) == MS5611_OK);
+            xSemaphoreGive(gSpi2Mutex);
+        }
     }
 
     osDelay(1000);
@@ -55,19 +105,36 @@ void sensor_ReadMagnetometer(void)
     magGetData(xMagDataReadySemaphore, Rocket.rawData.mag);
 }
 
-// SPI2: Barometer
+// SPI2: Barometer. Pressure first, then temperature.
+// Bad readings never reach Rocket.rawData; they only clear baroHealthy.
 void sensor_ReadBarometer(void)
 {
-    if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
-    {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
-        int32_t p_mbar_x100 = Barometer_getPressure(true);
-        int32_t t_centiC = Barometer_getTemp(false);
+    uint32_t d1, d2;
+    int32_t pressurePa, tempCentiC;
+    MS5611_Status_t status;
 
-        /* Convert units */
-        Rocket.rawData.pressure = (float)p_mbar_x100; // because mbar*100 = Pa
-        Rocket.rawData.temperature = t_centiC / 100.0f;
-        xSemaphoreGive(gSpi2Mutex);
+    if (!baroReady)
+        return;
+
+    if (!baroConvert(MS5611_StartPressure, &d1, &status))
+        return;
+    if (status == MS5611_OK && !baroConvert(MS5611_StartTemperature, &d2, &status))
+        return;
+    if (status == MS5611_OK)
+        status = MS5611_Compensate(&baro, d1, d2, &pressurePa, &tempCentiC);
+
+    if (status == MS5611_OK)
+    {
+        Rocket.rawData.pressure = (float)pressurePa;
+        // Barometer die temperature, not air temperature. Heat from the MCU, regulator and
+        // other parts spreads through the PCB, so after warm-up this reads several degC
+        // above ambient (~+6 degC on the bench). Only logged; not used by flight code.
+        Rocket.rawData.temperature = tempCentiC / 100.0f;
+        Rocket.rawData.baroHealthy = true;
+    }
+    else
+    {
+        Rocket.rawData.baroHealthy = false;
     }
 }
 

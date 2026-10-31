@@ -24,7 +24,6 @@
 #include "Utils/servo.h"
 #include "Drivers/rfm69.h"
 #include "i2c.h"
-#include "Drivers/ms5611.h"
 #include "attitude_estimation_wrapper.h"
 #include "queue.h"
 #include <string.h>
