@@ -36,7 +36,7 @@ void sensor_HardwareInit()
 
     if (xSemaphoreTake(gSpi2Mutex, portMAX_DELAY) == pdTRUE)
     {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_4, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
         Barometer_init();
         Barometer_setOSR(OSR_1024);
         xSemaphoreGive(gSpi2Mutex);
@@ -60,7 +60,7 @@ void sensor_ReadBarometer(void)
 {
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(10)) == pdTRUE)
     {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_8, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_4, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
         int32_t p_mbar_x100 = Barometer_getPressure(true);
         int32_t t_centiC = Barometer_getTemp(false);
 

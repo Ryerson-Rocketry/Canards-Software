@@ -178,7 +178,7 @@ void gpsSendCfg(const uint8_t *buf, uint16_t len)
 {
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_128, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_64, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
         CS_LOW();
         HAL_SPI_Transmit(&hspi2, (uint8_t *)buf, len, 100);
         CS_HIGH();
@@ -190,7 +190,7 @@ void gpsRead(SemaphoreHandle_t gSpi2Mutex, uint8_t rx[GPS_BUF_SIZE], const uint8
 {
     if (xSemaphoreTake(gSpi2Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
     {
-        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_128, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
+        SPI2_Switch_Settings(SPI_BAUDRATEPRESCALER_64, SPI_POLARITY_LOW, SPI_PHASE_1EDGE);
 
         CS_LOW();
         HAL_SPI_TransmitReceive(&hspi2, tx, rx, GPS_BUF_SIZE, 100);
