@@ -32,7 +32,12 @@ const float alpha_gyro = 0.2f;
 void sensor_HardwareInit()
 {
     magInit();
-    LSM6DSO32_Rocket_Init(&hspi1);
+
+    if (xSemaphoreTake(gSpi1Mutex, portMAX_DELAY) == pdTRUE)
+    {
+        LSM6DSO32_Rocket_Init(&hspi1);
+        xSemaphoreGive(gSpi1Mutex);
+    }
 
     if (xSemaphoreTake(gSpi2Mutex, portMAX_DELAY) == pdTRUE)
     {
