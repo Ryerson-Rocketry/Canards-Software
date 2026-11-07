@@ -8,6 +8,7 @@
 
 static float tempPadK = 288.15f;
 static float padPressure = SEA_LEVEL_PA;
+static float previousMaxDeflectionAngle = 0;
 
 
 // run before launch on pad
@@ -55,6 +56,9 @@ static float getMaxDeflectionAngle(float mach)
    if (drop < 0)
      drop = 0.0f;
    float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (drop); // change in the mach speed 
+  
+   if (max_deflection_angle < previousMaxDeflectionAngle)
+     max_deflection_angle = previousMaxDeflectionAngle;
 
    if (max_deflection_angle > HARD_ANGLE_LIMIT)
      max_deflection_angle = HARD_ANGLE_LIMIT;
