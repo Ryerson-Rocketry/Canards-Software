@@ -5,9 +5,8 @@
 #include "Configs/flight_configs.h"
 #include "math.h"
 
-static float tempPadK;
-static float padPressure;
-static float peakMach;
+static float tempPadK = 288.15f;
+static float padPressure = SEA_LEVEL_PA;
 
 
 // run before launch on pad
@@ -22,7 +21,7 @@ static float calculateMach(float pressure, float velocity)
 {
     // todo: 1. calcuate temperature, 2. calculate speed of sound 3. divide ground speed by speed of sound 
     float pressureRatio = (pressure > 0.0f) ? pressure / padPressure : 1.0f; 
-    float tempK = tempPadK * powf(ratio, ISA_TEMP_EXP); 
+    float tempK = tempPadK * powf(pressureRatio, ISA_TEMP_EXP); 
     float c = sqrt(AIR_GAMMA * DRY_AIR_GAS_CONSTANT * tempK);  
     return velocity / c;
 }
@@ -46,7 +45,7 @@ static float getMaxDeflectionAngle(float mach)
    if (!pastPeak)
      return BASE_DEFLECTION_ANGLE;
 
-   float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (0.8 - mach); // change in the mach speed 
+   float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (peakMach - mach); // change in the mach speed 
 
    if (max_deflection_angle > HARD_ANGLE_LIMIT)
      max_deflection_angle = HARD_ANGLE_LIMIT;
@@ -93,7 +92,7 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     float max_deflection_angle = getMaxDeflectionAngle(calculateMach(pressure, velocity));
     
     if (fabsf(deflectionAngle) > max_deflection_angle) {
-      deflectionAngle = max_deflection_angle;
+      deflectionAngle = copysignf(max_deflection_angle, deflectionAngle);
     }
 
 
