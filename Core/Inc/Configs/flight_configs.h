@@ -4,10 +4,12 @@
 #define MAG_X_OFFSET 0.077f
 #define MAG_Y_OFFSET 0.147f
 
-// ─── Atmospheric Constants ────────────────────────────────────────────────────
+// ─── Atmospheric Constants / Speed Of Sound ────────────────────────────────────────────────────
 #define SEA_LEVEL_PA 101325.0f // Standard atmospheric pressure (Pa)
 #define PI 3.14159265358979323846f
-
+#define AIR_GAMMA 1.4f
+#define DRY_AIR_GAS_CONSTANT 287.053f // J / (KG * K)
+#define ISA_TEMP_EXP 0.19026f                                      
 // ─── GPS ──────────────────────────────────────────────────────────────────────
 #define GPS_BUF_SIZE 128
 
@@ -42,3 +44,10 @@
 
 // ─── I2C ──────────────────────────────────────────────────────────────────────
 #define ESP32_I2C_ADDRESS 0x30 // 48 decimal
+
+ // ─── Servo Deflection ────────────────────────────────────────────────────────
+#define BASE_DEFLECTION_ANGLE 10.0f
+#define HARD_ANGLE_LIMIT 45.0f
+#define DEFLECTION_MACH_STEP 0.1f  
+#define DEFLECTION_ANGLE_STEP 5.0f
+

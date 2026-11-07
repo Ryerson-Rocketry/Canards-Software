@@ -5,6 +5,58 @@
 #include "Configs/flight_configs.h"
 #include "math.h"
 
+static float tempPadK;
+static float padPressure;
+static float peakMach;
+
+
+// run before launch on pad
+void servoPadPressureTemperature (float pressure, float tempCentiC)
+{
+  tempPadK = tempCentiC / 100.0f + 273.15f;
+  padPressure = pressure;
+}
+
+
+static float calculateMach(float pressure, float velocity) 
+{
+    // todo: 1. calcuate temperature, 2. calculate speed of sound 3. divide ground speed by speed of sound 
+    float pressureRatio = (pressure > 0.0f) ? pressure / padPressure : 1.0f; 
+    float tempK = tempPadK * powf(ratio, ISA_TEMP_EXP); 
+    float c = sqrt(AIR_GAMMA * DRY_AIR_GAS_CONSTANT * tempK);  
+    return velocity / c;
+}
+
+static float getMaxDeflectionAngle(float mach) 
+{
+   static float peakMach = 0.0f;
+   static bool pastPeak = false;
+
+   if (!pastPeak) 
+   {
+     if (peakMach < mach)
+       peakMach = mach;
+     
+     // 0/3 is for ensuring that we don't trigger before reaching atleast above 0.3 mach speed
+     // -0.1 is for uncertainity, kinda to reduce the influence of noise 
+     if (mach < peakMach - 0.1 && peakMach > 0.3)
+       pastPeak = true;
+   }
+
+   if (!pastPeak)
+     return BASE_DEFLECTION_ANGLE;
+
+   float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (0.8 - mach); // change in the mach speed 
+
+   if (max_deflection_angle > HARD_ANGLE_LIMIT)
+     max_deflection_angle = HARD_ANGLE_LIMIT;
+
+   return max_deflection_angle;
+
+
+
+}
+
 /* Forward declaration — fixes implicit declaration error */
 uint16_t servoAngleToPWM(float angle);
 
@@ -38,19 +90,26 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     }
 
     float deflectionAngle = controlForceCoeff * sideForce;
+    float max_deflection_angle = getMaxDeflectionAngle(calculateMach(pressure, velocity));
+    
+    if (fabsf(deflectionAngle) > max_deflection_angle) {
+      deflectionAngle = max_deflection_angle;
+    }
+
+
 
     // float angle = getControlForceCoeff(velocity) * forceNormalized;
-
-    if (deflectionAngle > DEFLECTION_ANGLE_LIMIT)
-    {
-        deflectionAngle = DEFLECTION_ANGLE_LIMIT;
-    }
-
-    if (deflectionAngle < -DEFLECTION_ANGLE_LIMIT)
-    {
-        deflectionAngle = -DEFLECTION_ANGLE_LIMIT;
-    }
-
+// 
+//     if (deflectionAngle > DEFLECTION_ANGLE_LIMIT)
+//     {
+//         deflectionAngle = DEFLECTION_ANGLE_LIMIT;
+//     }
+// 
+//     if (deflectionAngle < -DEFLECTION_ANGLE_LIMIT)
+//     {
+//         deflectionAngle = -DEFLECTION_ANGLE_LIMIT;
+//     }
+// 
     return servoAngleToPWM(deflectionAngle);
 }
 
@@ -75,3 +134,7 @@ uint16_t moveServo(float torque, float velocity, float pressure)
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, pwm);
     return pwm;
 }
+
+
+
+
