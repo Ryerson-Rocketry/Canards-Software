@@ -4,6 +4,7 @@
 #include "cmsis_os2.h"
 #include "Configs/flight_configs.h"
 #include "math.h"
+#include <stdbool.h>
 
 static float tempPadK = 288.15f;
 static float padPressure = SEA_LEVEL_PA;
@@ -20,9 +21,9 @@ void servoPadPressureTemperature (float pressure, float tempCentiC)
 static float calculateMach(float pressure, float velocity) 
 {
     // todo: 1. calcuate temperature, 2. calculate speed of sound 3. divide ground speed by speed of sound 
-    float pressureRatio = (pressure > 0.0f) ? pressure / padPressure : 1.0f; 
+    float pressureRatio = (pressure > 0.0f && padPressure > 0.0f) ? pressure / padPressure : 1.0f; 
     float tempK = tempPadK * powf(pressureRatio, ISA_TEMP_EXP); 
-    float c = sqrt(AIR_GAMMA * DRY_AIR_GAS_CONSTANT * tempK);  
+    float c = sqrtf(AIR_GAMMA * DRY_AIR_GAS_CONSTANT * tempK);  
     return velocity / c;
 }
 
@@ -31,21 +32,29 @@ static float getMaxDeflectionAngle(float mach)
    static float peakMach = 0.0f;
    static bool pastPeak = false;
 
+
+   if (!isfinite(mach))
+    return BASE_DEFLECTION_ANGLE;
+
    if (!pastPeak) 
    {
      if (peakMach < mach)
        peakMach = mach;
      
      // 0/3 is for ensuring that we don't trigger before reaching atleast above 0.3 mach speed
-     // -0.1 is for uncertainity, kinda to reduce the influence of noise 
-     if (mach < peakMach - 0.1 && peakMach > 0.3)
+     // -0.02 is for uncertainity, kinda to reduce the influence of noise 
+     if (mach < peakMach - 0.02 && peakMach > 0.3)
        pastPeak = true;
    }
 
    if (!pastPeak)
      return BASE_DEFLECTION_ANGLE;
 
-   float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (peakMach - mach); // change in the mach speed 
+
+   float drop = peakMach - mach;
+   if (drop < 0)
+     drop = 0.0f;
+   float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (drop); // change in the mach speed 
 
    if (max_deflection_angle > HARD_ANGLE_LIMIT)
      max_deflection_angle = HARD_ANGLE_LIMIT;
