@@ -12,9 +12,9 @@ static float previousMaxDeflectionAngle = 0;
 
 
 // run before launch on pad
-void servoPadPressureTemperature (float pressure, float tempCentiC)
+void servoPadPressureTemperature (float pressure, float tempC)
 {
-  tempPadK = tempCentiC / 100.0f + 273.15f;
+  tempPadK = tempC + 273.15f;
   padPressure = pressure;
 }
 
@@ -44,7 +44,7 @@ static float getMaxDeflectionAngle(float mach)
      
      // 0/3 is for ensuring that we don't trigger before reaching atleast above 0.3 mach speed
      // -0.02 is for uncertainity, kinda to reduce the influence of noise 
-     if (mach < peakMach - 0.02 && peakMach > 0.3)
+     if (mach < peakMach - 0.02f && peakMach > 0.3f)
        pastPeak = true;
    }
 
@@ -63,9 +63,9 @@ static float getMaxDeflectionAngle(float mach)
    if (max_deflection_angle > HARD_ANGLE_LIMIT)
      max_deflection_angle = HARD_ANGLE_LIMIT;
 
+   previousMaxDeflectionAngle = max_deflection_angle;
+
    return max_deflection_angle;
-
-
 
 }
 
@@ -101,7 +101,7 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
         controlForceCoeff = 1.74 - (2.7710 * powf(10, -3) * velocity) + (1.4210 * pow(10, -6)) * pow(velocity, 2);
     }
 
-    float deflectionAngle = controlForceCoeff * sideForce;
+    float deflectionAngle = (isfinite(controlForceCoeff * sideForce)) ? controlForceCoeff * sideForce : 0;
     float max_deflection_angle = getMaxDeflectionAngle(calculateMach(pressure, velocity));
     
     if (fabsf(deflectionAngle) > max_deflection_angle) {
