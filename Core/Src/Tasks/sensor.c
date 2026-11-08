@@ -12,6 +12,7 @@
 #include "cmsis_os.h"
 #include <stdbool.h>
 #include "math.h"
+#include "Utils/servo.h"
 
 extern SPI_HandleTypeDef hspi1;
 extern SemaphoreHandle_t gSpi1Mutex;
@@ -183,5 +184,10 @@ void sensor_GroundReference(void)
         setGroundPressure(Rocket.rawData.pressure);
         groundCaptured = true;
     }
+
+    // passes the pad pressure and temperature to the servo so it can calculate speed of sound and subsequently velocity in mach
+    if (Rocket.flightState == STATE_PAD && Rocket.rawData.baroHealthy)
+        servoPadPressureTemperature(Rocket.rawData.pressure, Rocket.rawData.temperature);
+
     xTaskNotifyGive(launchDetTaskHandle);
 }
