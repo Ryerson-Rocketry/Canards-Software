@@ -75,6 +75,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Utils/math_utils.c
     Core/Src/Utils/servo.c
     Core/Src/Drivers/rfm69.c
+    Core/Src/Drivers/rfm9x.c
     Core/Src/StateEstimation/attitude_estimation.cpp
     Core/Src/StateEstimation/attitude_estimation_wrapper.cpp
     Core/Src/Utils/i2c_scanner.c
@@ -82,6 +83,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/Tasks/sdcard.c
     Core/Src/Tasks/launchDet.c
     Core/Src/Tasks/gps.c
+    Core/Src/Tasks/radio.c
 )
 
 # Add include paths
