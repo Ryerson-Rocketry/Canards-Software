@@ -350,6 +350,14 @@ void vDataStoreTask(void *argument)
     len = DataStore_WriteToCSV();
 
     DataStore_WriteToSDCard(len);
+
+    // Landed: the row above is the last one. Flush everything not yet synced
+    // (up to 49 rows) and close the file, then never write again.
+    if (Rocket.flightState == STATE_LANDED)
+    {
+      DataStore_Close();
+      sdInitialized = false; // every later cycle exits at the !sdInitialized check
+    }
   }
 }
 
@@ -376,7 +384,7 @@ void vControlTask(void *argument)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    if (Rocket.flightState == STATE_CANARDS_ACTIVATE)
+    if (canardsActive()) // STATE_CANARDS_ACTIVATE (two-stage) or STATE_CANARDS_ACTIVATION (single-stage)
     {
       uint32_t elapsedMillis = osKernelGetTickCount();
 
