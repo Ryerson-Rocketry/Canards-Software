@@ -106,12 +106,12 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     float max_deflection_angle = getMaxDeflectionAngle(calculateMach(pressure, velocity));
     
     if (fabsf(deflectionAngle) > max_deflection_angle) {
-      return lastPwn;
+      return lastPwm;
     }
 
-    lastPwn = servoAngleToPWM(deflectionAngle);
+    lastPwm = servoAngleToPWM(deflectionAngle);
     
-    return lastPwn;
+    return lastPwm;
 
 
 
