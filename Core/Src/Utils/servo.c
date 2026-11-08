@@ -9,6 +9,7 @@
 static float tempPadK = 288.15f;
 static float padPressure = SEA_LEVEL_PA;
 static float previousMaxDeflectionAngle = 0;
+static uint16_t lastPwm = SERVO_CENTER_US;
 
 
 // run before launch on pad
@@ -105,8 +106,12 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     float max_deflection_angle = getMaxDeflectionAngle(calculateMach(pressure, velocity));
     
     if (fabsf(deflectionAngle) > max_deflection_angle) {
-      deflectionAngle = copysignf(max_deflection_angle, deflectionAngle);
+      return lastPwn;
     }
+
+    lastPwn = servoAngleToPWM(deflectionAngle);
+    
+    return lastPwn;
 
 
 
