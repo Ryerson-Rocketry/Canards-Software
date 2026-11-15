@@ -31,7 +31,9 @@
 #include "Tasks/sensor.h"
 #include "Tasks/sdcard.h"
 #include "Tasks/launchDet.h"
-// #include "Tasks/gps.h"
+#include "Tasks/radio.h"
+#include "Drivers/rfm9x.h"
+#include "Tasks/gps.h"
 #include "tim.h"
 
 extern FATFS SDFatFS;
@@ -53,7 +55,7 @@ osThreadId_t oriEstTaskHandle;
 osThreadId_t launchDetTaskHandle;
 osThreadId_t dataStoreTaskHandle;
 // osThreadId_t gpsRetrieveTaskHandle;
-// osThreadId_t radioTaskHandle;
+osThreadId_t radioTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t heartbeatTaskHandle;
 osThreadId_t gpsTaskHandle;
@@ -71,7 +73,7 @@ volatile bool dataStoreTask = false;
 // volatile bool radioTask = false;
 volatile bool controlTask = false;
 volatile bool oriEstTask = false;
-// volatile bool gpsTask = false;
+volatile bool gpsTask = false; // not in the watchdog check, like the radio
 
 // Priorities follow the data pipeline (high -> low):
 //   readSensor -> launchDet -> oriEst -> altEst -> control -> dataStore -> heartbeat
@@ -91,19 +93,19 @@ const osThreadAttr_t controlTask_attributes = {
     .name = "controlCanards", .stack_size = 1024 * 4, .priority = osPriorityAboveNormal3};
 const osThreadAttr_t heartbeat_attributes = {
     .name = "wdgTask", .stack_size = 256 * 4, .priority = osPriorityBelowNormal3};
-// const osThreadAttr_t radiotask_attributes = {
-//     .name = "radioTask", .stack_size = 1024 * 2, .priority = osPriorityNormal};
-// const osThreadAttr_t gps_attributes = {
-//     .name = "gpsTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
+const osThreadAttr_t radiotask_attributes = {
+    .name = "radioTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
+const osThreadAttr_t gps_attributes = {
+    .name = "gpsTask", .stack_size = 1024 * 4, .priority = osPriorityNormal};
 
-// void vGpsTask(void *argument);
+void vGpsTask(void *argument);
 void vReadSensorTask(void *argument);
 void vAltEstTask(void *argument);
 void vOriEstTask(void *argument);
 void vLaunchDetTask(void *argument);
 void vDataStoreTask(void *argument);
 void vControlTask(void *argument);
-// void vRadioTask(void *argument);
+void vRadioTask(void *argument);
 void vHeartbeatTask(void *argument);
 void MX_FREERTOS_Init(void);
 
@@ -129,44 +131,40 @@ void MX_FREERTOS_Init(void)
   launchDetTaskHandle = osThreadNew(vLaunchDetTask, NULL, &launchDetTask_attributes);
   dataStoreTaskHandle = osThreadNew(vDataStoreTask, NULL, &dataStoreTask_attributes);
   controlTaskHandle = osThreadNew(vControlTask, NULL, &controlTask_attributes);
-  // radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
-  // gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
+  radioTaskHandle = osThreadNew(vRadioTask, NULL, &radiotask_attributes);
+  gpsTaskHandle = osThreadNew(vGpsTask, NULL, &gps_attributes);
   heartbeatTaskHandle = osThreadNew(vHeartbeatTask, NULL, &heartbeat_attributes);
 }
 
-// void vGpsTask(void *argument)
-// {
-//   static uint8_t dummy_tx[GPS_BUF_SIZE];
-//   memset(dummy_tx, 0xFF, sizeof(dummy_tx));
-//   uint8_t gpsData[GPS_BUF_SIZE];
-//   GNSS_Data vehicle_gps;
-//   memset(&vehicle_gps, 0, sizeof(GNSS_Data));
-//   CS_HIGH();
-//   vTaskDelay(pdMS_TO_TICKS(1500));
-//   // // only used for setting up the gps
-//   // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
-//   // vTaskDelay(pdMS_TO_TICKS(500));
-//   // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
-//   // vTaskDelay(pdMS_TO_TICKS(500));
-//   for (;;)
-//   {
-//     gpsRead(gSpi2Mutex, gpsData, dummy_tx);
-//     process_gps_data((char *)gpsData, &vehicle_gps);
-//     if (vehicle_gps.has_fix == 1)
-//     {
-//       HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
-//     }
-//     taskENTER_CRITICAL();
-//     Rocket.gps.has_fix = vehicle_gps.has_fix;
-//     Rocket.gps.latitude = vehicle_gps.latitude;
-//     Rocket.gps.longitude = vehicle_gps.longitude;
-//     Rocket.gps.altitude_m = vehicle_gps.altitude_m;
-//     Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
-//     taskEXIT_CRITICAL();
-//     osDelay(1000);
-//     gpsTask = true;
-//   }
-// }
+void vGpsTask(void *argument)
+{
+  static uint8_t dummy_tx[GPS_BUF_SIZE];
+  memset(dummy_tx, 0xFF, sizeof(dummy_tx));
+  uint8_t gpsData[GPS_BUF_SIZE];
+  GNSS_Data vehicle_gps;
+  memset(&vehicle_gps, 0, sizeof(GNSS_Data));
+  CS_HIGH();
+  vTaskDelay(pdMS_TO_TICKS(1500));
+  // only used for setting up the gps
+  // gpsSendCfg(cfg_revert, sizeof(cfg_revert));
+  // vTaskDelay(pdMS_TO_TICKS(500));
+  // gpsSendCfg(cfg_spiprot, sizeof(cfg_spiprot));
+  // vTaskDelay(pdMS_TO_TICKS(500));
+  for (;;)
+  {
+    gpsRead(gSpi2Mutex, gpsData, dummy_tx);
+    process_gps_data((char *)gpsData, &vehicle_gps);
+    taskENTER_CRITICAL();
+    Rocket.gps.has_fix = vehicle_gps.has_fix;
+    Rocket.gps.latitude = vehicle_gps.latitude;
+    Rocket.gps.longitude = vehicle_gps.longitude;
+    Rocket.gps.altitude_m = vehicle_gps.altitude_m;
+    Rocket.gps.speed_kmh = vehicle_gps.speed_kmh;
+    taskEXIT_CRITICAL();
+    osDelay(1000);
+    gpsTask = true;
+  }
+}
 
 void vReadSensorTask(void *argument)
 {
@@ -437,31 +435,35 @@ void vControlTask(void *argument)
   }
 }
 
-// void vRadioTask(void *argument)
-// {
-//   char csvBufferReceived[128];
-//   char sendingBuffer[128];
-//   memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//   for (;;)
-//   {
-//     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-//     if (xQueueReceive(radioQueueHandle, csvBufferReceived, 0) == pdPASS)
-//     {
-//       if (xSemaphoreTake(gI2c1Mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-//       {
-//         strncpy(sendingBuffer, csvBufferReceived, sizeof(sendingBuffer) - 1);
-//         sendingBuffer[sizeof(sendingBuffer) - 1] = '\0';
-//         if ((HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(ESP32_I2C_ADDRESS << 1), (uint8_t *)sendingBuffer, (uint16_t)strlen(sendingBuffer), HAL_MAX_DELAY)) != HAL_OK)
-//         {
-//           printf("I2C transmission 1 to ESP32 failed\r\n");
-//         }
-//         memset(sendingBuffer, 0, sizeof(sendingBuffer));
-//       }
-//       xSemaphoreGive(gI2c1Mutex);
-//     }
-//     radioTask = true;
-//   }
-// }
+// Not part of the watchdog check, a radio fault must never reset the flight computer
+void vRadioTask(void *argument)
+{
+  static char packet[RFM9X_MAX_PAYLOAD + 1];
+  bool radioReady = false;
+  uint32_t nextWake = osKernelGetTickCount();
+
+  for (;;)
+  {
+    nextWake += RADIO_PERIOD_MS;
+
+    if (!radioReady)
+    {
+      radioReady = (rfm9xInit() == HAL_OK);
+    }
+
+    if (radioReady)
+    {
+      int len = Radio_BuildPacket(packet, sizeof(packet));
+
+      if (len > 0 && rfm9xTransmit((const uint8_t *)packet, (uint8_t)len) != HAL_OK)
+      {
+        radioReady = false;
+      }
+    }
+
+    osDelayUntil(nextWake);
+  }
+}
 
 void vHeartbeatTask(void *argument)
 {
