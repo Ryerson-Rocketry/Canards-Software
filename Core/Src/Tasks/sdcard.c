@@ -75,7 +75,8 @@ bool DataStore_SDCardInit(void)
             "roll (centi-deg), pitch (centi-deg), yaw (centi-deg), "
             "tilt_angle (centi-deg), altitude (cm), velocity (cm/s), "
             "pressure (centi-Pa), temperature (centi-degC), "
-            "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg)"
+            "roll_error (centi-deg), pitch_error (centi-deg), pwm_angle (centi-deg), "
+            "gps_fix, lat (1e-7 deg), lon (1e-7 deg), alt (cm), speed (centi-kmh)"
             "\r\n";
         f_puts(fileHeaders, &SDFile);
         f_sync(&SDFile);
@@ -132,25 +133,25 @@ int DataStore_WriteToCSV(void)
     APPEND_SCALED(Rocket.snapshot.pitchError);
     APPEND_SCALED(Rocket.snapshot.pwmAngle);
 
-    // {
-    //     GpsFix_t gps_snap;
-    //     taskENTER_CRITICAL();
-    //     gps_snap = Rocket.gps;
-    //     taskEXIT_CRITICAL();
+    {
+        GpsFix_t gps_snap;
+        taskENTER_CRITICAL();
+        gps_snap = Rocket.gps;
+        taskEXIT_CRITICAL();
 
-    //     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", (int)gps_snap.has_fix);
-    //     if (gps_snap.has_fix)
-    //     {
-    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.latitude * 1e7));
-    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.longitude * 1e7));
-    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.altitude_m * 100.0f));
-    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.speed_kmh * 100.0f));
-    //     }
-    //     else
-    //     {
-    //         len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",0,0,0,0");
-    //     }
-    // }
+        len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%d", (int)gps_snap.has_fix);
+        if (gps_snap.has_fix)
+        {
+            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.latitude * 1e7));
+            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.longitude * 1e7));
+            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.altitude_m * 100.0f));
+            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",%ld", (int32_t)(gps_snap.speed_kmh * 100.0f));
+        }
+        else
+        {
+            len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, ",0,0,0,0");
+        }
+    }
     len += snprintf(csvBuffer + len, sizeof(csvBuffer) - len, "\r\n");
 
 #undef APPEND_SCALED
