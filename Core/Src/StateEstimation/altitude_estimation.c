@@ -85,3 +85,17 @@ void altUpdate(float *pos, float *vel, float press, float systemCov[2][2], float
     systemCov[1][0] = newCov[1][0];
     systemCov[1][1] = newCov[1][1];
 }
+
+static float groundPressurePa = 101325.0f; // default to standard sea-level pressure
+
+void setGroundPressure(float p)
+{
+    groundPressurePa = p;
+}
+
+float getRelativeAltitude(float currentPressurePa)
+{
+    // Standard atmosphere formula relative to the captured ground pressure:
+    // h = 44330 * (1 - (P / P0)^0.1903)
+    return 44330.0f * (1.0f - powf(currentPressurePa / groundPressurePa, 0.1903f));
+}

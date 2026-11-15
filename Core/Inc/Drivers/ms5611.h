@@ -1,96 +1,77 @@
 /*
- * barometer.h
+ * ms5611.h
  *
- *  Created on: 5 oct. 2018
- *      Author: alex
+ * Author: Protsenko
+ *
+ * Driver for the TE MS5611-01BA03 barometer over SPI.
+ *
  */
 
-#ifndef BAROMETER_H_
-#define BAROMETER_H_
+#ifndef MS5611_H
+#define MS5611_H
 
 #include <stdint.h>
-#include <stdbool.h>
+#include "stm32f4xx_hal.h"
 
-/**
- * @brief The oversampling rate
- * @warn an higher value means a longer conversion
- */
-typedef enum OSR
+#define MS5611_RESET_WAIT_MS 4
+
+typedef enum
 {
-	OSR_256,
-	OSR_512,
-	OSR_1024,
-	OSR_2048,
-	OSR_4096
-} OSR;
+    MS5611_OK = 0,
+    MS5611_ERR_SPI,  // HAL SPI transfer failed or timed out
+    MS5611_ERR_CRC,  // PROM calibration data failed its CRC-4 check
+    MS5611_ERR_RANGE // ADC returned 0 (read too early / no chip) or result outside datasheet limits
+} MS5611_Status_t;
+
+
+typedef enum
+{
+    MS5611_OSR_256 = 0,
+    MS5611_OSR_512,
+    MS5611_OSR_1024,
+    MS5611_OSR_2048,
+    MS5611_OSR_4096
+} MS5611_OSR_t;
+
+typedef struct
+{
+    SPI_HandleTypeDef *hspi;
+    GPIO_TypeDef *csPort;
+    uint16_t csPin;
+    MS5611_OSR_t osr;
+    uint16_t prom[8];
+} MS5611_t;
+
+/** @brief Send the reset command. Wait MS5611_RESET_WAIT_MS before MS5611_ReadPROM. */
+MS5611_Status_t MS5611_Reset(const MS5611_t *dev);
+
+/** @brief Read all 8 PROM words into dev->prom and verify the CRC-4. */
+MS5611_Status_t MS5611_ReadPROM(MS5611_t *dev);
+
+/** @brief Start a pressure (D1) / temperature (D2) conversion at dev->osr. */
+MS5611_Status_t MS5611_StartPressure(const MS5611_t *dev);
+MS5611_Status_t MS5611_StartTemperature(const MS5611_t *dev);
+
+/** @brief Wait time (ms) to pass to osDelay after a Start call, including the 1-tick margin. */
+uint32_t MS5611_ConvWaitMs(const MS5611_t *dev);
 
 /**
- * @brief Init the Barometer with default parameters
+ * @brief Read the 24-bit result of the last conversion.
+ * @return MS5611_ERR_RANGE if the result is 0 (read before conversion finished, or no chip)
  */
-extern void Barometer_init();
+MS5611_Status_t MS5611_ReadADC(const MS5611_t *dev, uint32_t *raw);
 
 /**
- * @brief Set the OSR (Oversampling rate)
- * 		  Setting another value from the enumeration will put the min OSR
- * @warn setting an higher value means taking more time to read the data
- * @param osr the oversampling rate (refers to OSR enumeration from barometer.h)
+ * @brief Convert raw D1/D2 into pressure and temperature using the datasheet
+ *        first and second order compensation. No bus access.
+ *
+ * @param pressurePa  pressure in Pa (= mbar x 100)
+ * @param tempCentiC  sensor die temperature in 0.01 degC (2007 = 20.07 degC). Reads above
+ *                    air temperature on a powered board. Do not offset it: the pressure
+ *                    compensation needs the die temperature.
+ * @return MS5611_ERR_RANGE if outside 10-1200 mbar or -40..85 degC
  */
-extern void Barometer_setOSR(OSR osr);
+MS5611_Status_t MS5611_Compensate(const MS5611_t *dev, uint32_t d1, uint32_t d2,
+                                  int32_t *pressurePa, int32_t *tempCentiC);
 
-/**
- * @brief Return the temperature with a 2 digits precision in celcius
- * Example : 2000 -> 20,00°C
- *
- * @param calculate true if you want to update the value
- * 		  It will update the threes values
- * @pre call Barometer_init
- *
- * @return the temperature
- */
-extern int32_t Barometer_getTemp(bool calculate);
-
-/**
- * @brief Return the pressure in mbar with a 2 digits precision
- * Example : 100000 -> 1000,00 mbar
- *
- * @param calculate true if you want to update the value
- * 		  It will update the threes values
- * @pre call Barometer_init
- *
- * @return the pressure
- */
-extern int32_t Barometer_getPressure(bool calculate);
-
-/**
- * @brief Return the altitude in meters
- *
- * @param calculate true if you want to update the value
- * 		  It will update the threes values
- * @pre call Barometer_init
- *
- * @return the altitude
- */
-extern float Barometer_getAltitude(bool calculate);
-
-/**
- * @brief calculate/update the altitude/pressure/temperature
- * 		  using the barometer
- */
-extern void Barometer_calculate();
-
-/**
- * @brief Store the ground reference pressure (Pa) used as the altitude baseline
- *
- * @param p the ground pressure in Pascals
- */
-void setGroundPressure(float p);
-
-/**
- * @brief Compute altitude (metres) relative to the stored ground pressure
- *
- * @param currentPressurePa the current pressure in Pascals
- * @return altitude above the ground reference in metres
- */
-float getRelativeAltitude(float currentPressurePa);
-
-#endif /* BAROMETER_H_ */
+#endif /* MS5611_H */
