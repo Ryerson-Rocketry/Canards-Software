@@ -75,7 +75,12 @@ static bool baroConvert(MS5611_Status_t (*start)(const MS5611_t *), uint32_t *ra
 void sensor_HardwareInit()
 {
     magInit();
-    LSM6DSO32_Rocket_Init(&hspi1);
+
+    if (xSemaphoreTake(gSpi1Mutex, portMAX_DELAY) == pdTRUE)
+    {
+        LSM6DSO32_Rocket_Init(&hspi1);
+        xSemaphoreGive(gSpi1Mutex);
+    }
 
     for (int attempt = 0; attempt < BARO_INIT_ATTEMPTS && !baroReady; attempt++)
     {
