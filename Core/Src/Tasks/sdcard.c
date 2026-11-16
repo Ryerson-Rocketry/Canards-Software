@@ -178,6 +178,20 @@ void DataStore_WriteToSDCard(int len)
     }
 }
 
+// Flushes everything still buffered (rows written since the last f_sync) and closes
+// the log file. Called once on STATE_LANDED. Safe to call more than once; after it
+// runs, nothing more may be written to SDFile.
+void DataStore_Close(void)
+{
+    if (!sdInitialized)
+    {
+        return; // no card / never opened / already closed
+    }
+
+    f_close(&SDFile); // f_close does an f_sync internally, then releases the file
+    sdInitialized = false;
+}
+
 // void send_to_radio()
 // {
 
