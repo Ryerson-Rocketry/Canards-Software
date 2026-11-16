@@ -10,8 +10,7 @@ static float tempPadK = 288.15f;
 static float padPressure = SEA_LEVEL_PA;
 static float previousMaxDeflectionAngle = 0;
 static uint16_t lastPwm = SERVO_CENTER_US;
-static float peakMach = 0.0f;
-static bool pastPeak = false;
+
 
 
 
@@ -36,12 +35,13 @@ static float calculateMach(float pressure, float velocity)
     return velocity / c;
 }
 
-static float getMaxDeflectionAngle(float mach) 
+static void peakMachReached(float mach) 
 {
-   
+  static float peakMach = 0.0f;
+  static bool pastPeak = false;
 
-   if (!isfinite(mach))
-    return BASE_DEFLECTION_ANGLE;
+  if (!isfinite(mach))
+    // what should I do?
 
    if (!pastPeak) 
    {
@@ -52,7 +52,14 @@ static float getMaxDeflectionAngle(float mach)
      // -0.02 is for uncertainity, kinda to reduce the influence of noise 
      if (mach < peakMach - 0.02f && peakMach > 0.3f)
        pastPeak = true;
-   }
+   }  
+}
+
+static float getMaxDeflectionAngle(float mach) 
+{
+  
+   if (!isfinite(mach))
+    return BASE_DEFLECTION_ANGLE;
 
    if (!pastPeak)
      return BASE_DEFLECTION_ANGLE;
