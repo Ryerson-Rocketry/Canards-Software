@@ -4,5 +4,6 @@
 
 uint16_t moveServo(float torque, float velocity, float pressure);
 void servoPadPressureTemperature(float pressurePa, float tempC); //temp in celsius
+void peakMachReached(float mach)
 
 #endif
