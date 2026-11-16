@@ -8,12 +8,21 @@
 
 typedef enum
 {
-    STATE_PAD,
-    STATE_BOOSTER_BURNOUT,
-    STATE_SEPARATION,
-    STATE_SUSTAINER_IGNITION,
-    STATE_CANARDS_ACTIVATE,
-    STATE_DESCENT
+    // ─── Shared (both rockets) ───
+    STATE_PAD = 0,                // on the pad, waiting for liftoff
+
+    // ─── Two-stage rocket only (ROCKET_CONFIG == ROCKET_TWO_STAGE) ───
+    STATE_BOOSTER_BURNOUT = 1,
+    STATE_SEPARATION = 2,
+    STATE_SUSTAINER_IGNITION = 3,
+    STATE_CANARDS_ACTIVATE = 4,   // two-stage canards phase (not STATE_CANARDS_ACTIVATION)
+    STATE_DESCENT = 5,
+
+    // ─── Single-stage rocket only (ROCKET_CONFIG == ROCKET_SINGLE_STAGE) ───
+    STATE_BOOSTER_BURN = 6,       // motor burning: logging + altitude KF on, servos off
+    STATE_CANARDS_ACTIVATION = 7, // single-stage canards phase (not STATE_CANARDS_ACTIVATE)
+    STATE_APOGEE = 8,             // servos off, logging continues
+    STATE_LANDED = 9              // no motion detected: log file closed, logging stopped
 } FlightState_t;
 
 typedef enum
@@ -99,5 +108,5 @@ typedef struct
     RocketState_t estimate;
     ControlData_t control;
     SDCardDataFormat_t snapshot;
-    // GpsFix_t gps;
+    GpsFix_t gps;
 } Rocket_States_t;

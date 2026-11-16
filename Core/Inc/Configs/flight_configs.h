@@ -1,5 +1,22 @@
 #pragma once
 
+// ─── Rocket Selection ─────────────────────────────────────────────────────────
+// Chooses which flight state machine is compiled in (see launchDet.c).
+#define ROCKET_TWO_STAGE    0 // booster + sustainer: PAD -> ... -> DESCENT (old states)
+#define ROCKET_SINGLE_STAGE 1 // single motor: PAD -> BOOSTER_BURN -> CANARDS_ACTIVATION -> APOGEE -> LANDED
+#define ROCKET_CONFIG ROCKET_SINGLE_STAGE
+
+// ─── Single-Stage Flight Thresholds ───────────────────────────────────────────
+#define SS_LIFTOFF_ACCEL_MG    4000.0f // raw Z accel (mg), gravity included, for liftoff
+#define SS_LIFTOFF_HOLD_MS     100     // liftoff accel must hold this long (ms)
+#define SS_CANARDS_DELAY_MS    3000    // canards turn on this long after STATE_BOOSTER_BURN starts (ms)
+#define SS_APOGEE_VELOCITY     25.0f   // KF vertical velocity (m/s) below which we call apogee
+#define SS_APOGEE_HOLD_MS      100     // velocity must stay below threshold this long (ms)
+#define SS_LANDED_ACCEL_TOL_MG 100.0f  // |total accel - 1000 mg| must stay below this
+#define SS_LANDED_GYRO_DPS     10.0f   // every gyro axis must stay below this (deg/s)
+#define SS_LANDED_VELOCITY     2.0f    // |KF vertical velocity| (m/s) must stay below this
+#define SS_LANDED_HOLD_MS      2000    // all landed conditions must hold this long (ms)
+
 // ─── Magnetometer Calibration ─────────────────────────────────────────────────
 #define MAG_X_OFFSET 0.077f
 #define MAG_Y_OFFSET 0.147f
@@ -16,9 +33,12 @@
 // ─── Logging ──────────────────────────────────────────────────────────────────
 #define FLIGHT_DATA_FILE_NAME "LOG.CSV"
 // One CSV row is ~294 B worst case (all 28 fields incl. a GPS fix); 512 gives margin.
-// The SD buffer, the radio queue item size, and the radio task buffers MUST all use
-// this so the full row isn't truncated or read past the end of the buffer.
+// The SD buffer MUST use this so the full row isn't truncated or read past the end
+// of the buffer.
 #define CSV_BUFFER_SIZE 512
+
+// ─── Radio ────────────────────────────────────────────────────────────────────
+#define RADIO_PERIOD_MS 1000 // Time between telemetry packets
 
 // ─── PID Gains ────────────────────────────────────────────────────────────────
 #define Kp 0.45f
