@@ -3,6 +3,6 @@
 #include <stdint.h>
 
 uint16_t moveServo(float torque, float velocity, float pressure);
-void servoPadPressureTemperature(float pressurePa, float tempCentiC);
+void servoPadPressureTemperature(float pressurePa, float tempC); //temp in celsius
 
 #endif
