@@ -14,7 +14,8 @@
 #define SS_APOGEE_HOLD_MS      100     // velocity must stay below threshold this long (ms)
 #define SS_LANDED_ACCEL_TOL_MG 100.0f  // |total accel - 1000 mg| must stay below this
 #define SS_LANDED_GYRO_DPS     10.0f   // every gyro axis must stay below this (deg/s)
-#define SS_LANDED_HOLD_MS      2000    // both landed conditions must hold this long (ms)
+#define SS_LANDED_VELOCITY     2.0f    // |KF vertical velocity| (m/s) must stay below this
+#define SS_LANDED_HOLD_MS      2000    // all landed conditions must hold this long (ms)
 
 // ─── Magnetometer Calibration ─────────────────────────────────────────────────
 #define MAG_X_OFFSET 0.077f

@@ -248,7 +248,9 @@ void state_canards_activation(uint32_t now)
 }
 
 // APOGEE -> LANDED: no motion for 2 s, i.e. total accel ~1 g (gravity only, any
-// orientation) and all gyro rates small. Logging is stopped by vDataStoreTask.
+// orientation), all gyro rates small, and KF vertical velocity near 0. The velocity
+// check stops a calm parachute descent (which also reads ~1 g) from counting as
+// landed. Logging is stopped by vDataStoreTask.
 void state_apogee(uint32_t now)
 {
   float ax = Rocket.rawData.accel[0];
@@ -259,7 +261,8 @@ void state_apogee(uint32_t now)
   bool still = (fabsf(accel_total_mg - 1000.0f) < SS_LANDED_ACCEL_TOL_MG) &&
                (fabsf(Rocket.rawData.gyro[0]) < SS_LANDED_GYRO_DPS) &&
                (fabsf(Rocket.rawData.gyro[1]) < SS_LANDED_GYRO_DPS) &&
-               (fabsf(Rocket.rawData.gyro[2]) < SS_LANDED_GYRO_DPS);
+               (fabsf(Rocket.rawData.gyro[2]) < SS_LANDED_GYRO_DPS) &&
+               (fabsf(Rocket.estimate.velocity) < SS_LANDED_VELOCITY);
 
   if (heldFor(still, &landed_active, &landed_start, now, SS_LANDED_HOLD_MS))
   {
