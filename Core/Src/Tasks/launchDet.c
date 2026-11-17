@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include "math.h"
 #include <stdio.h>
+#include "Utils/servo.h"
 
 extern TaskHandle_t altEstTaskHandle;
 extern TaskHandle_t oriEstTaskHandle;
@@ -280,19 +281,23 @@ void checkFlightState()
   {
   case STATE_PAD:
     state_pad(now);
+    peakMachReached(calculateMach(Rocket.rawData.pressure, Rocket.rawData.temperature));
     break;
 
   case STATE_BOOSTER_BURN:
     state_booster_burn(now);
+    peakMachReached(calculateMach(Rocket.rawData.pressure, Rocket.rawData.temperature));
     break;
 
   case STATE_CANARDS_ACTIVATION:
     state_canards_activation(now);
+    peakMachReached(calculateMach(Rocket.rawData.pressure, Rocket.rawData.temperature));
     break;
 
   case STATE_APOGEE:
     // Servo power is cut by vControlTask's non-active branch.
     state_apogee(now);
+    peakMachReached(calculateMach(Rocket.rawData.pressure, Rocket.rawData.temperature));
     break;
 
   case STATE_LANDED:

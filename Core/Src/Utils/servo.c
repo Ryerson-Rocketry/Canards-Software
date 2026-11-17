@@ -41,18 +41,19 @@ static void peakMachReached(float mach)
   static bool pastPeak = false;
 
   if (!isfinite(mach))
-    // what should I do?
+    return;
 
-   if (!pastPeak) 
-   {
-     if (peakMach < mach)
-       peakMach = mach;
-     
-     // 0/3 is for ensuring that we don't trigger before reaching atleast above 0.3 mach speed
-     // -0.02 is for uncertainity, kinda to reduce the influence of noise 
-     if (mach < peakMach - 0.02f && peakMach > 0.3f)
-       pastPeak = true;
-   }  
+  if (!pastPeak) 
+  {
+    if (peakMach < mach)
+      peakMach = mach;
+    
+    // 0/3 is for ensuring that we don't trigger before reaching atleast above 0.3 mach speed
+    // -0.02 is for uncertainity, kinda to reduce the influence of noise 
+    if (mach < peakMach - 0.02f && peakMach > 0.3f)
+      pastPeak = true;
+  }  
+
 }
 
 static float getMaxDeflectionAngle(float mach) 
