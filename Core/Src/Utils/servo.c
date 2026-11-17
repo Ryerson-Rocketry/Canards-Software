@@ -9,7 +9,8 @@
 static float tempPadK = 288.15f;
 static float padPressure = SEA_LEVEL_PA;
 static float previousMaxDeflectionAngle = 0;
-static uint16_t lastPwm = SERVO_CENTER_US;
+static volatile float peakMach = 0.0f;
+static volatile bool pastPeak = false;
 
 
 
@@ -21,67 +22,57 @@ void servoPadPressureTemperature (float pressure, float tempC)
   padPressure = pressure;
   peakMach = 0.0f;
   pastPeak = false;
-  previousMaxDeflectionAngle = 0;
+  previousMaxDeflectionAngle = BASE_DEFLECTION_ANGLE;
 
 }
 
 
 static float calculateMach(float pressure, float velocity) 
 {
-    // todo: 1. calcuate temperature, 2. calculate speed of sound 3. divide ground speed by speed of sound 
     float pressureRatio = (pressure > 0.0f && padPressure > 0.0f) ? pressure / padPressure : 1.0f; 
     float tempK = tempPadK * powf(pressureRatio, ISA_TEMP_EXP); 
     float c = sqrtf(AIR_GAMMA * DRY_AIR_GAS_CONSTANT * tempK);  
     return velocity / c;
 }
 
-static void peakMachReached(float mach) 
+void servoUpdatePeakMach(float pressure, float velocity)
 {
-  static float peakMach = 0.0f;
-  static bool pastPeak = false;
+  if (pastPeak)
+    return;
 
+  float mach = calculateMach(pressure, velocity);
   if (!isfinite(mach))
     return;
 
-  if (!pastPeak) 
-  {
-    if (peakMach < mach)
-      peakMach = mach;
-    
-    // 0/3 is for ensuring that we don't trigger before reaching atleast above 0.3 mach speed
-    // -0.02 is for uncertainity, kinda to reduce the influence of noise 
-    if (mach < peakMach - 0.02f && peakMach > 0.3f)
-      pastPeak = true;
-  }  
+  if (mach > peakMach)
+    peakMach = mach;
 
+  // 0.3: don't latch before the rocket has really accelerated
+  // 0.02: margin so noise doesn't trigger it
+  if (peakMach > 0.3f && mach < peakMach - 0.02f)
+    pastPeak = true;
 }
 
-static float getMaxDeflectionAngle(float mach) 
+static float getMaxDeflectionAngle(float mach)
 {
-  
-   if (!isfinite(mach))
-    return BASE_DEFLECTION_ANGLE;
+  if (!pastPeak || !isfinite(mach))
+    return (pastPeak) ? previousMaxDeflectionAngle : BASE_DEFLECTION_ANGLE;
 
-   if (!pastPeak)
-     return BASE_DEFLECTION_ANGLE;
+  float drop = peakMach - mach;
+  if (drop < 0.0f)
+    drop = 0.0f;
 
+  float maxAngle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * drop;
 
-   float drop = peakMach - mach;
-   if (drop < 0)
-     drop = 0.0f;
-   float max_deflection_angle = BASE_DEFLECTION_ANGLE + (DEFLECTION_ANGLE_STEP / DEFLECTION_MACH_STEP) * (drop); // change in the mach speed 
-  
-   if (max_deflection_angle < previousMaxDeflectionAngle)
-     max_deflection_angle = previousMaxDeflectionAngle;
+  if (maxAngle < previousMaxDeflectionAngle)
+    maxAngle = previousMaxDeflectionAngle;
+  if (maxAngle > HARD_ANGLE_LIMIT)
+    maxAngle = HARD_ANGLE_LIMIT;
 
-   if (max_deflection_angle > HARD_ANGLE_LIMIT)
-     max_deflection_angle = HARD_ANGLE_LIMIT;
-
-   previousMaxDeflectionAngle = max_deflection_angle;
-
-   return max_deflection_angle;
-
+  previousMaxDeflectionAngle = maxAngle;
+  return maxAngle;
 }
+
 
 /* Forward declaration — fixes implicit declaration error */
 uint16_t servoAngleToPWM(float angle);
@@ -107,12 +98,12 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     if (velocity < 330.0f)
     {
         // subsonic
-        controlForceCoeff = 337 * expf(-0.02777 * velocity);
+        controlForceCoeff = 337 * expf(-0.02777f * velocity);
     }
     else
     {
         // supersonic
-        controlForceCoeff = 1.74 - (2.7710 * powf(10, -3) * velocity) + (1.4210 * pow(10, -6)) * pow(velocity, 2);
+        controlForceCoeff = 1.74f - (2.7710e-3f * velocity) + (1.4210e-6f) * pow(velocity, 2);
     }
 
     float deflectionAngle = (isfinite(controlForceCoeff * sideForce)) ? controlForceCoeff * sideForce : 0;
