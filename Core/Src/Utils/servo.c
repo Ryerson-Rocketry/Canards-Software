@@ -130,7 +130,7 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     
     if (fabsf(deflectionAngle) > max_deflection_angle) {
       if (deflectionAngle < 0) {
-        return servoAngleToPWM(-1 * max_deflection_angle);;
+        return servoAngleToPWM(-1 * max_deflection_angle);
       } else {
         return servoAngleToPWM(max_deflection_angle);
       }
