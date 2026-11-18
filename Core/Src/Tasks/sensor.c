@@ -134,7 +134,7 @@ void sensor_ReadBarometer(void)
         Rocket.rawData.pressure = (float)pressurePa;
         // Barometer die temperature, not air temperature. Heat from the MCU, regulator and
         // other parts spreads through the PCB, so after warm-up this reads several degC
-        // above ambient (~+6 degC on the bench). Only logged; not used by flight code.
+        // above ambient (~+6 degC on the bench). Used in speed of sound calculation for mach conversion.
         Rocket.rawData.temperature = tempCentiC / 100.0f;
         Rocket.rawData.baroHealthy = true;
     }
