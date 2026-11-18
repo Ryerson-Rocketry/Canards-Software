@@ -115,8 +115,14 @@ int main(void)
     // reset the flags
     __HAL_RCC_CLEAR_RESET_FLAGS();
   }
+#if defined(KF_BENCH_TEST)
+  // Do not start PWM in the bench build. GPIO initialization leaves the
+  // high-side servo power switch low; reinforce that state here.
+  HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_RESET);
+#else
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+#endif
 
   /* USER CODE END 2 */
 

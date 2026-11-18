@@ -30,6 +30,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
+# Opt-in bench-only firmware. OFF preserves the original flight behavior.
+option(KF_BENCH_TEST "Enable non-flight KF calibration bench mode" OFF)
+if(KF_BENCH_TEST)
+    message(WARNING "KF_BENCH_TEST is ON: BENCH ONLY; never launch this firmware")
+endif()
+
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
 
@@ -101,6 +107,10 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     ARM_MATH_CM4
     # Add user defined symbols
 )
+
+if(KF_BENCH_TEST)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE KF_BENCH_TEST=1)
+endif()
 
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)

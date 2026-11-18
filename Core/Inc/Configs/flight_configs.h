@@ -29,7 +29,14 @@
 #define GPS_BUF_SIZE 128
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
+#if defined(KF_BENCH_TEST)
+// Separate from flight logs. FATFS will overwrite this on every boot.
+#define FLIGHT_DATA_FILE_NAME "KFBENCH.CSV"
+// Automatic flush + close after 5 minutes; do not power-cycle to stop logging.
+#define KF_BENCH_LOG_DURATION_MS 300000U
+#else
 #define FLIGHT_DATA_FILE_NAME "LOG.CSV"
+#endif
 // One CSV row is ~294 B worst case (all 28 fields incl. a GPS fix); 512 gives margin.
 // The SD buffer MUST use this so the full row isn't truncated or read past the end
 // of the buffer.

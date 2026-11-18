@@ -312,10 +312,11 @@ void vLaunchDetTask(void *argument)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+#if !defined(KF_BENCH_TEST)
     checkRecorded();
-
     checkFlightState();
-
+#endif
+    // In bench mode remain in PAD, but keep the sensor/estimator pipeline alive.
     notifyTasks();
 
     satisfyWDG();
@@ -326,6 +327,9 @@ void vDataStoreTask(void *argument)
 {
   int len; // must hold the full row length (~294 B); a uint8_t would wrap at 256 and truncate the SD write
   bool sdInitialized = DataStore_SDCardInit();
+#if defined(KF_BENCH_TEST)
+  const uint32_t benchLogStart = osKernelGetTickCount();
+#endif
   // radioQueueHandle = xQueueCreate(1, CSV_BUFFER_SIZE); // item size must match csvBuffer so the full row isn't truncated
 
   for (;;)
@@ -333,11 +337,22 @@ void vDataStoreTask(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     dataStoreTask = true; // always set flag first — SD ops below must not block WDG
 
+#if defined(KF_BENCH_TEST)
+    // Close in the SD task, after 5 minutes, so a bench recording is
+    // flushed without forcing a flight state transition.
+    if (sdInitialized &&
+        (uint32_t)(osKernelGetTickCount() - benchLogStart) >= pdMS_TO_TICKS(KF_BENCH_LOG_DURATION_MS))
+    {
+      DataStore_Close();
+      sdInitialized = false;
+    }
+#else
     if (Rocket.flightState == STATE_PAD)
     {
       dataStoreTask = true;
       continue;
     }
+#endif
 
     if (!sdInitialized)
     {
@@ -361,6 +376,15 @@ void vDataStoreTask(void *argument)
 
 void vControlTask(void *argument)
 {
+#if defined(KF_BENCH_TEST)
+  // Bench-only no-actuation task. No servo startup pulse and no PWM writes.
+  HAL_GPIO_WritePin(Servo_HS_Sw_GPIO_Port, Servo_HS_Sw_Pin, GPIO_PIN_RESET);
+  for (;;)
+  {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    controlTask = true;
+  }
+#else
   float setPoint = 0.0f;
   float rollError = 0;
   static float integral = 0;
@@ -433,6 +457,7 @@ void vControlTask(void *argument)
 
     controlTask = true;
   }
+#endif
 }
 
 // Not part of the watchdog check, a radio fault must never reset the flight computer

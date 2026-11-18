@@ -315,10 +315,15 @@ bool canardsActive(void)
 
 void notifyTasks()
 {
+#if defined(KF_BENCH_TEST)
+  // Altitude KF must execute for bench tests while state remains PAD.
+  xTaskNotifyGive(altEstTaskHandle);
+#else
   if (Rocket.flightState != STATE_PAD)
   {
     xTaskNotifyGive(altEstTaskHandle);
   }
+#endif
 
   if (Rocket.flightState == STATE_BOOSTER_BURNOUT ||
       Rocket.flightState == STATE_SEPARATION ||
@@ -336,7 +341,10 @@ void satisfyWDG()
   // Satisfy watchdog for tasks intentionally not running in current state
   if (Rocket.flightState == STATE_PAD)
   {
+#if !defined(KF_BENCH_TEST)
+    // Flight builds intentionally do not run altitude estimation in PAD.
     altEstTask = true;
+#endif
     oriEstTask = true;
     dataStoreTask = true;
     controlTask = true;
