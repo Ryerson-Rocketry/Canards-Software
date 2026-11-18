@@ -257,7 +257,7 @@ void vAltEstTask(void *argument)
 
     // track peak Mach from liftoff onward, every cycle, regardless of canard state
     if (Rocket.flightState != STATE_PAD)
-      servoUpdatePeakMach(Rocket.rawData.pressure, Rocket.estimate.velocity);
+      servoUpdatePeakMach(Rocket.rawData.pressure, Rocket.estimate.velocity, accel_in_m_s2, current_tick);
     
     // update rocket state estimate and gyro integration
     Rocket.estimate.timestamp = current_tick;

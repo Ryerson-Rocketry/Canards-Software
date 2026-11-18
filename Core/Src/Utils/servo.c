@@ -5,6 +5,10 @@
 #include "Configs/flight_configs.h"
 #include "math.h"
 #include <stdbool.h>
+#define PEAK_LATCH_HOLD_MS 200U  
+
+static bool negAccelActive = false;
+static uint32_t negAccelStart = 0;
 
 static float tempPadK = 288.15f;
 static float padPressure = SEA_LEVEL_PA;
@@ -23,6 +27,8 @@ void servoPadPressureTemperature (float pressure, float tempC)
   peakMach = 0.0f;
   pastPeak = false;
   previousMaxDeflectionAngle = BASE_DEFLECTION_ANGLE;
+  negAccelActive = false;
+  negAccelStart = 0;
 
 }
 
@@ -35,22 +41,33 @@ static float calculateMach(float pressure, float velocity)
     return velocity / c;
 }
 
-void servoUpdatePeakMach(float pressure, float velocity)
+void servoUpdatePeakMach(float pressure, float velocity, float accel, uint32_t nowTick)
 {
   if (pastPeak)
     return;
 
   float mach = calculateMach(pressure, velocity);
-  if (!isfinite(mach))
-    return;
+  
 
   if (mach > peakMach)
     peakMach = mach;
 
-  // 0.3: don't latch before the rocket has really accelerated
-  // 0.02: margin so noise doesn't trigger it
-  if (peakMach > 0.3f && mach < peakMach - 0.02f)
-    pastPeak = true;
+   if (accel < 0.0f) // NaN fails this check, so it counts as "not negative"
+  {
+    if (!negAccelActive)
+    {
+      negAccelStart = nowTick;
+      negAccelActive = true;
+    }
+    else if ((nowTick - negAccelStart) >= PEAK_LATCH_HOLD_MS && peakMach > 0.3f)
+    {
+      pastPeak = true;
+    }
+  }
+  else
+  {
+    negAccelActive = false;
+  }
 }
 
 static float getMaxDeflectionAngle(float mach)
