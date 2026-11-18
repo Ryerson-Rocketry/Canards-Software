@@ -47,7 +47,9 @@ void servoUpdatePeakMach(float pressure, float velocity, float accel, uint32_t n
     return;
 
   float mach = calculateMach(pressure, velocity);
-  
+  if (!isfinite(mach)) {
+    return;
+  }
 
   if (mach > peakMach)
     peakMach = mach;
@@ -120,7 +122,7 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     else
     {
         // supersonic
-        controlForceCoeff = 1.74f - (2.7710e-3f * velocity) + (1.4210e-6f) * pow(velocity, 2);
+        controlForceCoeff = 1.74f - (2.7710e-3f * velocity) + (1.4210e-6f) * velocity * velocity;
     }
 
     float deflectionAngle = (isfinite(controlForceCoeff * sideForce)) ? controlForceCoeff * sideForce : 0;
