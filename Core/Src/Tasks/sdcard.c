@@ -9,6 +9,9 @@
 #include "string.h"
 #include "fatfs.h"
 
+
+#define MAX_FILENAME_LEN 13
+
 extern FATFS SDFatFS;
 extern FIL SDFile;
 extern char SDPath[4];
@@ -21,6 +24,7 @@ extern Rocket_States_t Rocket;
 static bool sdInitialized = false;
 static char csvBuffer[CSV_BUFFER_SIZE];
 static uint32_t syncCounter = 0;
+static uint32_t fileCounter = 0;
 UINT bytesWritten;
 
 // check if writing to sd has been attempted, if not check if sdcard is present
@@ -37,34 +41,57 @@ UINT bytesWritten;
 bool DataStore_SDCardInit(void)
 {
     bool cardPresent = (HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin) == GPIO_PIN_RESET);
-    // printf("[SD] card detect pin=%d present=%d\r\n",
-    //        HAL_GPIO_ReadPin(SDIO_NCD_GPIO_Port, SDIO_NCD_Pin), cardPresent);
-
     if (!cardPresent)
     {
-        // printf("[SD] No card detected. Skipping SD interface.\r\n");
         sdInitialized = false;
         return false;
     }
 
     if (f_mount(&SDFatFS, (TCHAR const *)SDPath, 1) != FR_OK)
     {
-        // printf("[SD] Mount failed.\r\n");
         sdInitialized = false;
         return false;
     }
 
-    if (f_open(&SDFile, FLIGHT_DATA_FILE_NAME, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
+    char fileName[MAX_FILENAME_LEN];
+    FILINFO fno;
+    FRESULT res;
+
+    // Find the next unused filename (survives both re-opens and power cycles)
+    while (fileCounter < 10000)
     {
-        // printf("[SD] Open failed.\r\n");
+
+        snprintf(fileName, sizeof(fileName), "LOG_%04lu.CSV", (unsigned long)fileCounter);
+        res = f_stat(fileName, &fno);
+
+        if (res == FR_NO_FILE)
+        {
+            break; // Filename does not exist yet; safe to create
+        }
+        if (res != FR_OK)
+        {
+            sdInitialized = false;
+            return false; // SD / filesystem error
+        }
+
+        fileCounter++;
+    }
+
+    if (fileCounter >= 10000)
+    {
+        sdInitialized = false;
+        return false; // Card full of log files
+    }
+
+    if (f_open(&SDFile, fileName, FA_CREATE_NEW | FA_WRITE) != FR_OK)
+    {
         sdInitialized = false;
         return false;
     }
 
     sdInitialized = true;
-    // printf("[SD] ready\r\n");
+    fileCounter++;
 
-    // Only write the header on a fresh file; an existing file just gets appended to.
     if (f_size(&SDFile) == 0)
     {
         char *fileHeaders =
@@ -81,9 +108,9 @@ bool DataStore_SDCardInit(void)
         f_puts(fileHeaders, &SDFile);
         f_sync(&SDFile);
     }
+
     return sdInitialized;
 }
-
 void DataStore_TelemetrySnapshot(void)
 {
     taskENTER_CRITICAL();
