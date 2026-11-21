@@ -303,12 +303,10 @@ void vOriEstTask(void *argument)
       dt = 0.1f;
     AttitudeEstimation_setDt(attitudeEstimationHandle, dt);
 
-    // Accel frame fix: roll & pitch came out anti-correlated with gravity because the
-    // accelerometer X/Y axes are 180 deg about Z relative to the estimator body frame.
-    // Negate X and Y (NOT Z, so gravity magnitude and the altitude KF's accel[2] use stay intact).
+    // accel and gyro share the IMU axes, so use accel as read
     float accelCorr[3] = {
-        -Rocket.rawData.accel[0],
-        -Rocket.rawData.accel[1],
+        Rocket.rawData.accel[0],
+        Rocket.rawData.accel[1],
         Rocket.rawData.accel[2]};
 
     // still = on the pad, about 1 g and not turning
