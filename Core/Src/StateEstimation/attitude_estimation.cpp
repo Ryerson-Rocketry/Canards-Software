@@ -125,46 +125,49 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
             mag_n[0],   mag_n[1],   mag_n[2];
 
     Eigen::Vector3f g(0.0f, 0.0f, 1.0f);
-    Eigen::Vector3f r = this->magReference;  // auto-calibrated field dir, not (1,0,0)
+    Eigen::Vector3f r = this->magReference;
 
-    // Extract quaternion parts
-    float qw = attitude[0];
-    Eigen::Vector3f qv = attitude.tail<3>();
-
-    // Skew-symmetric matrix helper
-    auto skew = [](Eigen::Vector3f v) -> Eigen::Matrix3f {
-        Eigen::Matrix3f S;
-        S <<  0,      -v.z(),  v.y(),
-              v.z(),   0,     -v.x(),
-             -v.y(),   v.x(),  0;
-        return S;
+    // Rotate a world-frame reference vector into the body frame.
+    // This is R(q)^T * v, using the quaternion conjugate.
+    auto worldToBody = [](const Eigen::Vector3f& v,
+                          const Eigen::Vector4f& q) -> Eigen::Vector3f {
+        float qw = q[0];
+        Eigen::Vector3f qv = q.tail<3>();
+        Eigen::Vector3f firstCross = qv.cross(v);
+        return v - 2.0f * qw * firstCross + 2.0f * qv.cross(firstCross);
     };
 
-    // Compute u vectors
-    Eigen::Vector3f ug = g.cross(qv);
-    Eigen::Vector3f ur = r.cross(qv);
+    Eigen::Matrix<float, 6, 1> predicted;
+    predicted.head<3>() = worldToBody(g, this->attitude);
+    predicted.tail<3>() = worldToBody(r, this->attitude);
 
-    // Build H 
-    Eigen::Matrix3f Hv_g = skew(ug + qw * g) + qv.dot(g) * Eigen::Matrix3f::Identity() - g * qv.transpose();
-    Eigen::Matrix3f Hv_r = skew(ur + qw * r) + qv.dot(r) * Eigen::Matrix3f::Identity() - r * qv.transpose();
-
-    // Assemble full 6x4 H matrix
+    // Numerical measurement Jacobian. Central differences keep the quaternion
+    // convention explicit and avoid sign mistakes in an analytic Jacobian.
     Eigen::Matrix<float, 6, 4> H;
-    H.block<3,1>(0, 0) = 2.0f * ug;
-    H.block<3,3>(0, 1) = 2.0f * Hv_g;
-    H.block<3,1>(3, 0) = 2.0f * ur;
-    H.block<3,3>(3, 1) = 2.0f * Hv_r;
+    const float eps = 1e-4f;
+    for (int column = 0; column < 4; ++column) {
+        Eigen::Vector4f qPlus = this->attitude;
+        Eigen::Vector4f qMinus = this->attitude;
+        qPlus[column] += eps;
+        qMinus[column] -= eps;
+        qPlus.normalize();
+        qMinus.normalize();
+
+        Eigen::Matrix<float, 6, 1> hPlus;
+        Eigen::Matrix<float, 6, 1> hMinus;
+        hPlus.head<3>() = worldToBody(g, qPlus);
+        hPlus.tail<3>() = worldToBody(r, qPlus);
+        hMinus.head<3>() = worldToBody(g, qMinus);
+        hMinus.tail<3>() = worldToBody(r, qMinus);
+        H.col(column) = (hPlus - hMinus) / (2.0f * eps);
+    }
 
     // Kalman gain: K = Pt * H^T * (H * Pt * H^T + Rt)^-1
     Eigen::Matrix<float, 4, 6> K = stateErrorCov * H.transpose()
                                  * (H * stateErrorCov * H.transpose() + this->measurementNoiseCov).inverse();
 
-    // Innovation: difference between real measurement and predicted measurement.
-    // h(q) is the reference vectors rotated by the quaternion; it is degree-2
-    // homogeneous in q, so by Euler's theorem H*q = 2*h(q). The predicted
-    // measurement is therefore 0.5*H*q (NOT H*q, which is the linear-KF form and
-    // double-counts h, leaving a static ~0.8 deg tilt bias the filter can't null).
-    Eigen::Matrix<float, 6, 1> innovation = this->Z - 0.5f * (H * this->attitude);
+    // Innovation is measured minus predicted.
+    Eigen::Matrix<float, 6, 1> innovation = this->Z - predicted;
 
     // State correction
     this->attitude = this->attitude + K * innovation;

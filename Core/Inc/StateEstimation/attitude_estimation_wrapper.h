@@ -16,7 +16,7 @@ extern "C"
     void AttitudeEstimation_setDt(AttitudeEstimationHandle handle, float dt);
 
     // Prediction step — call every gyro sample
-    // gyro_array: [wx, wy, wz] in rad/s
+    // gyro_array: [wx, wy, wz] in degrees/s
     // out_quaternion: [qw, qx, qy, qz]
     void AttitudeEstimation_predict(AttitudeEstimationHandle handle,
                                     float gyro_array[3],

@@ -65,6 +65,12 @@ void AttitudeEstimation_getRPY(AttitudeEstimationHandle handle,
     out_rpy[2] = atan2f(2.0f*(qw*qz + qx*qy),
                         1.0f - 2.0f*(qy*qy + qz*qz))
                  * (180.0f / M_PI);
+
+    // Suppress floating-point noise around the identity attitude.
+    for (int i = 0; i < 3; ++i) {
+        if (fabsf(out_rpy[i]) < 0.0001f)
+            out_rpy[i] = 0.0f;
+    }
 }
 
 #ifdef __cplusplus
