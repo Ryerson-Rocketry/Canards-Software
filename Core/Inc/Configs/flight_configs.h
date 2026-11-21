@@ -79,4 +79,5 @@
 
 // ─── EKF ────────────────────────────────────────────────────────
 #define EKF_ACCEL_GRAVITY_TOL_MG 100.0f // pad only, accel used as gravity within this of 1 g
+#define EKF_STILL_GYRO_DPS       5.0f   // pad only, still means turning slower than this
 #define EKF_GYRO_BIAS_ALPHA      0.02f  // pad gyro offset averaging, frozen at liftoff

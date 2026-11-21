@@ -311,11 +311,15 @@ void vOriEstTask(void *argument)
         -Rocket.rawData.accel[1],
         Rocket.rawData.accel[2]};
 
-    // accel is gravity only while still on the pad
+    // still = on the pad, about 1 g and not turning
     const float accelNorm = sqrtf(accelCorr[0] * accelCorr[0] + accelCorr[1] * accelCorr[1] +
                                   accelCorr[2] * accelCorr[2]);
+    float rate2 = 0.0f; // turning rate squared
+    for (int i = 0; i < 3; i++)
+      rate2 += (Rocket.rawData.gyroRaw[i] - gyroBias[i]) * (Rocket.rawData.gyroRaw[i] - gyroBias[i]);
     const bool stillOnPad = (Rocket.flightState == STATE_PAD) &&
-                            (fabsf(accelNorm - 1000.0f) < EKF_ACCEL_GRAVITY_TOL_MG);
+                            (fabsf(accelNorm - 1000.0f) < EKF_ACCEL_GRAVITY_TOL_MG) &&
+                            (rate2 < EKF_STILL_GYRO_DPS * EKF_STILL_GYRO_DPS);
 
     // raw gyro minus pad offset, the EMA lags ~0.15 s
     float gyroCorr[3];
@@ -327,11 +331,9 @@ void vOriEstTask(void *argument)
     }
 
     AttitudeEstimation_predict(attitudeEstimationHandle, gyroCorr, attitude);
-    // in flight correct with mag only
+    // accel + mag only while still, gyro only otherwise, mag is disturbed in flight
     if (stillOnPad)
       AttitudeEstimation_correct(attitudeEstimationHandle, accelCorr, Rocket.rawData.mag, attitude);
-    else
-      AttitudeEstimation_correctMagOnly(attitudeEstimationHandle, Rocket.rawData.mag, attitude);
     AttitudeEstimation_getRPY(attitudeEstimationHandle, attitudeRPY);
 
     Rocket.estimate.rpy[0] = attitudeRPY[0];
