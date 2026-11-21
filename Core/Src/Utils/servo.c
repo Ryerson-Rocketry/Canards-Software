@@ -117,7 +117,7 @@ uint16_t calcForceToPWM(float torque, float velocity, float pressure)
     if (velocity < 330.0f)
     {
         // subsonic
-        controlForceCoeff = 337 * expf(-0.02777f * velocity);
+        controlForceCoeff = 192.0f * expf(-0.0232f * velocity);
     }
     else
     {
