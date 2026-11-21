@@ -15,6 +15,7 @@ int Radio_BuildPacket(char *buffer, size_t size)
     float accel[3];
     float gyro[3];
     float pwmAngle;
+    float tiltAngle;
     FlightState_t flightState;
     GpsFix_t gps;
 
@@ -25,6 +26,7 @@ int Radio_BuildPacket(char *buffer, size_t size)
         gyro[i] = Rocket.rawData.gyro[i];
     }
     pwmAngle = Rocket.control.pwmAngle;
+    tiltAngle = Rocket.estimate.tilt_angle;
     flightState = Rocket.flightState;
     gps = Rocket.gps;
     taskEXIT_CRITICAL();
@@ -35,7 +37,7 @@ int Radio_BuildPacket(char *buffer, size_t size)
     }
 
     int len = snprintf(buffer, size,
-                       RFM9X_CALLSIGN ",%lu,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%ld,%ld,%ld,%ld",
+                       RFM9X_CALLSIGN ",%lu,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%ld,%ld,%ld,%ld",
                        (unsigned long)osKernelGetTickCount(),
                        (int)flightState,
                        (long)(accel[0] * 100),
@@ -45,6 +47,7 @@ int Radio_BuildPacket(char *buffer, size_t size)
                        (long)(gyro[1] * 100),
                        (long)(gyro[2] * 100),
                        (long)(pwmAngle * 100),
+                       (long)(tiltAngle * 100),
                        (int)gps.has_fix,
                        (long)(gps.latitude * 1e7),
                        (long)(gps.longitude * 1e7),
