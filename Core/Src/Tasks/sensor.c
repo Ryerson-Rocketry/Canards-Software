@@ -155,6 +155,7 @@ void sensor_ReadIMUAccelerometer(void)
         LSM6DSO32_Read_Accel(Rocket.rawData.accel);
         for (int i = 0; i < 3; i++)
         {
+            Rocket.rawData.accelRaw[i] = Rocket.rawData.accel[i]; 
             accel_filt[i] = (alpha_accel * Rocket.rawData.accel[i]) + ((1.0f - alpha_accel) * accel_filt[i]);
             Rocket.rawData.accel[i] = accel_filt[i];
         }
@@ -173,6 +174,7 @@ void sensor_ReadIMUGyro(void)
         LSM6DSO32_Read_Gyro(Rocket.rawData.gyro);
         for (int i = 0; i < 3; i++)
         {
+            Rocket.rawData.gyroRaw[i] = Rocket.rawData.gyro[i]; // raw copy for the EKF
             // Formula: Smooth Value = (New * Alpha) + (Old * (1 - Alpha))
             gyro_filt[i] = (alpha_gyro * Rocket.rawData.gyro[i]) + ((1.0f - alpha_gyro) * gyro_filt[i]);
             Rocket.rawData.gyro[i] = fabsf(gyro_filt[i]) < 0.05f ? 0.0f : gyro_filt[i];

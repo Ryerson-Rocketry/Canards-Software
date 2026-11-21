@@ -95,7 +95,7 @@ Eigen::Vector4f AttitudeEstimation::attitudeEstimation(float gyro_array[3] ) {
     return this->attitude;
 }
 
-Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], float mag_array[3]) {
+Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], float mag_array[3], bool useAccel) {
     
     float mag_n[3] = {mag_array[0], mag_array[1], mag_array[2]};
     float mag_norm = sqrtf(mag_array[0]*mag_array[0] + mag_array[1]*mag_array[1] + mag_array[2]*mag_array[2]);
@@ -104,10 +104,7 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
         mag_n[1] = mag_array[1]/mag_norm;
         mag_n[2] = mag_array[2]/mag_norm;
 
-        // First valid mag reading defines the world-frame field reference. The
-        // rocket is vertical on the pad and the quaternion is still ~identity, so
-        // body frame ~= world frame here -> this captures the TRUE field direction
-        // (including the local dip) instead of the hardcoded horizontal (1,0,0).
+        // Use the first valid reading as the local magnetic field reference.
         if (!magRefInitialized) {
             this->magReference = Eigen::Vector3f(mag_n[0], mag_n[1], mag_n[2]);
             this->magRefInitialized = true;
@@ -125,54 +122,62 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
             mag_n[0],   mag_n[1],   mag_n[2];
 
     Eigen::Vector3f g(0.0f, 0.0f, 1.0f);
-    Eigen::Vector3f r = this->magReference;  // auto-calibrated field dir, not (1,0,0)
+    Eigen::Vector3f r = this->magReference;
 
-    // Extract quaternion parts
-    float qw = attitude[0];
-    Eigen::Vector3f qv = attitude.tail<3>();
-
-    // Skew-symmetric matrix helper
-    auto skew = [](Eigen::Vector3f v) -> Eigen::Matrix3f {
-        Eigen::Matrix3f S;
-        S <<  0,      -v.z(),  v.y(),
-              v.z(),   0,     -v.x(),
-             -v.y(),   v.x(),  0;
-        return S;
+    // Predict how each reference vector appears in the sensor's body frame.
+    auto worldToBody = [](const Eigen::Vector3f& v,
+                          const Eigen::Vector4f& q) -> Eigen::Vector3f {
+        float qw = q[0];
+        Eigen::Vector3f qv = q.tail<3>();
+        Eigen::Vector3f firstCross = qv.cross(v);
+        return v - 2.0f * qw * firstCross + 2.0f * qv.cross(firstCross);
     };
 
-    // Compute u vectors
-    Eigen::Vector3f ug = g.cross(qv);
-    Eigen::Vector3f ur = r.cross(qv);
+    Eigen::Matrix<float, 6, 1> predicted;
+    predicted.head<3>() = worldToBody(g, this->attitude);
+    predicted.tail<3>() = worldToBody(r, this->attitude);
 
-    // Build H 
-    Eigen::Matrix3f Hv_g = skew(ug + qw * g) + qv.dot(g) * Eigen::Matrix3f::Identity() - g * qv.transpose();
-    Eigen::Matrix3f Hv_r = skew(ur + qw * r) + qv.dot(r) * Eigen::Matrix3f::Identity() - r * qv.transpose();
-
-    // Assemble full 6x4 H matrix
+    // Estimate how the predicted readings change with each quaternion component.
     Eigen::Matrix<float, 6, 4> H;
-    H.block<3,1>(0, 0) = 2.0f * ug;
-    H.block<3,3>(0, 1) = 2.0f * Hv_g;
-    H.block<3,1>(3, 0) = 2.0f * ur;
-    H.block<3,3>(3, 1) = 2.0f * Hv_r;
+    const float eps = 1e-4f;
+    for (int column = 0; column < 4; ++column) {
+        Eigen::Vector4f qPlus = this->attitude;
+        Eigen::Vector4f qMinus = this->attitude;
+        qPlus[column] += eps;
+        qMinus[column] -= eps;
+        qPlus.normalize();
+        qMinus.normalize();
+
+        Eigen::Matrix<float, 6, 1> hPlus;
+        Eigen::Matrix<float, 6, 1> hMinus;
+        hPlus.head<3>() = worldToBody(g, qPlus);
+        hPlus.tail<3>() = worldToBody(r, qPlus);
+        hMinus.head<3>() = worldToBody(g, qMinus);
+        hMinus.tail<3>() = worldToBody(r, qMinus);
+        H.col(column) = (hPlus - hMinus) / (2.0f * eps);
+    }
+
+    // in flight accel is thrust/drag not gravity, so ignore its rows (zero innovation, huge noise)
+    Eigen::Matrix<float, 6, 6> Rt = this->measurementNoiseCov;
+    if (!useAccel)
+        Rt.block<3, 3>(0, 0) *= 1.0e4f;
 
     // Kalman gain: K = Pt * H^T * (H * Pt * H^T + Rt)^-1
     Eigen::Matrix<float, 4, 6> K = stateErrorCov * H.transpose()
-                                 * (H * stateErrorCov * H.transpose() + this->measurementNoiseCov).inverse();
+                                 * (H * stateErrorCov * H.transpose() + Rt).inverse();
 
-    // Innovation: difference between real measurement and predicted measurement.
-    // h(q) is the reference vectors rotated by the quaternion; it is degree-2
-    // homogeneous in q, so by Euler's theorem H*q = 2*h(q). The predicted
-    // measurement is therefore 0.5*H*q (NOT H*q, which is the linear-KF form and
-    // double-counts h, leaving a static ~0.8 deg tilt bias the filter can't null).
-    Eigen::Matrix<float, 6, 1> innovation = this->Z - 0.5f * (H * this->attitude);
+    // Compare the sensor readings with the predicted readings.
+    Eigen::Matrix<float, 6, 1> innovation = this->Z - predicted;
+    if (!useAccel)
+        innovation.head<3>().setZero();
 
-    // State correction
+    // Use that difference to update the attitude estimate.
     this->attitude = this->attitude + K * innovation;
 
-    // Normalize quaternion to prevent drift
+    // Keep the quaternion at unit length.
     this->attitude.normalize();
 
-    // Covariance correction
+    // Update the uncertainty after applying the correction.
     this->stateErrorCov = (Eigen::Matrix4f::Identity() - K * H) * this->stateErrorCov;
 
     return this->attitude;

@@ -197,12 +197,10 @@ void vReadSensorTask(void *argument)
 
 void vAltEstTask(void *argument)
 {
-  // Process noise - accounts for accelerometer noise AND unmodeled dynamics
-  // These values work well for rocket flights where there are aerodynamic effects
-  // the simple kinematic model doesn't capture
+  // Q set each cycle from dt and KF_SIGMA_ACCEL
   float processNoise[2][2] = {
-      {0.01f, 0.0f}, // Position process noise (m²)
-      {0.0f, 0.1f}   // Velocity process noise (m²/s²) - increased because velocity compounds errors faster
+      {0.0f, 0.0f},
+      {0.0f, 0.0f}
   };
 
   // Initial uncertainty - start with high uncertainty, filter will converge quickly
@@ -218,11 +216,10 @@ void vAltEstTask(void *argument)
   };
   // Note: stateTransition[0][1] gets set to dt each iteration in your code
 
-  // Barometer measurement noise - MS5611 in flight conditions
-  // Using 1.0 accounts for vibration and dynamic pressure effects during flight
-  const float baroAltVar = 1.0f; // Variance in m² (standard deviation ≈ 1.0m)
+  // R = KF_BARO_VAR
 
   static uint32_t last_tick = 0;
+  static uint32_t gateStart = 0; // tick the baro gate closed, 0 = open
   float dt = 0.0f;
 
   float accel_in_m_s2;
@@ -244,16 +241,33 @@ void vAltEstTask(void *argument)
 
     stateTransition[0][1] = dt;
 
-    accel_in_m_s2 = (Rocket.rawData.accel[2] - 1000.0f) * 0.00980665f * cosf(Rocket.estimate.tilt_angle * M_PI / 180.0f);
+    const float sa2 = KF_SIGMA_ACCEL * KF_SIGMA_ACCEL;
+    const float dt2 = dt * dt;
+    processNoise[0][0] = sa2 * dt2 * dt2 / 4.0f;
+    processNoise[0][1] = sa2 * dt2 * dt / 2.0f;
+    processNoise[1][0] = processNoise[0][1];
+    processNoise[1][1] = sa2 * dt2;
+
+    // raw accel, the EMA lags ~0.3 s, no tilt so EKF errors can't leak in
+    accel_in_m_s2 = (Rocket.rawData.accelRaw[2] - 1000.0f) * 0.00980665f;
     if (fabsf(accel_in_m_s2) > 500.0f)
       accel_in_m_s2 = 0.0f;
 
     altPredict(dt, &Rocket.estimate.position, &Rocket.estimate.velocity,
                accel_in_m_s2, processNoise, systemCov, stateTransition);
 
+    // skip baro above KF_BARO_GATE_MACH for at most KF_BARO_GATE_MAX_MS, NaN Mach still updates
     baro_altitude = getRelativeAltitude(Rocket.rawData.pressure);
-    altUpdate(&Rocket.estimate.position, &Rocket.estimate.velocity,
-              baro_altitude, systemCov, baroAltVar);
+    const float machEst = servoGetMach(Rocket.rawData.pressure, Rocket.estimate.velocity);
+    const bool fast = (machEst > KF_BARO_GATE_MACH);
+    if (!fast)
+      gateStart = 0;
+    else if (gateStart == 0)
+      gateStart = current_tick;
+    const bool gateTimedOut = fast && (current_tick - gateStart) > KF_BARO_GATE_MAX_MS;
+    if (!fast || gateTimedOut)
+      altUpdate(&Rocket.estimate.position, &Rocket.estimate.velocity,
+                baro_altitude, systemCov, KF_BARO_VAR);
 
     // track peak Mach from liftoff onward, every cycle, regardless of canard state
     if (Rocket.flightState != STATE_PAD)
@@ -274,6 +288,7 @@ void vOriEstTask(void *argument)
   float attitudeRPY[3];
   static uint32_t last_tick = 0;
   float dt;
+  static float gyroBias[3] = {0.0f, 0.0f, 0.0f}; // gyro offset averaged on the pad, frozen at liftoff
 
   for (;;)
   {
@@ -296,8 +311,27 @@ void vOriEstTask(void *argument)
         -Rocket.rawData.accel[1],
         Rocket.rawData.accel[2]};
 
-    AttitudeEstimation_predict(attitudeEstimationHandle, Rocket.rawData.gyro, attitude);
-    AttitudeEstimation_correct(attitudeEstimationHandle, accelCorr, Rocket.rawData.mag, attitude);
+    // accel is gravity only while still on the pad
+    const float accelNorm = sqrtf(accelCorr[0] * accelCorr[0] + accelCorr[1] * accelCorr[1] +
+                                  accelCorr[2] * accelCorr[2]);
+    const bool stillOnPad = (Rocket.flightState == STATE_PAD) &&
+                            (fabsf(accelNorm - 1000.0f) < EKF_ACCEL_GRAVITY_TOL_MG);
+
+    // raw gyro minus pad offset, the EMA lags ~0.15 s
+    float gyroCorr[3];
+    for (int i = 0; i < 3; i++)
+    {
+      if (stillOnPad)
+        gyroBias[i] += EKF_GYRO_BIAS_ALPHA * (Rocket.rawData.gyroRaw[i] - gyroBias[i]);
+      gyroCorr[i] = Rocket.rawData.gyroRaw[i] - gyroBias[i];
+    }
+
+    AttitudeEstimation_predict(attitudeEstimationHandle, gyroCorr, attitude);
+    // in flight correct with mag only
+    if (stillOnPad)
+      AttitudeEstimation_correct(attitudeEstimationHandle, accelCorr, Rocket.rawData.mag, attitude);
+    else
+      AttitudeEstimation_correctMagOnly(attitudeEstimationHandle, Rocket.rawData.mag, attitude);
     AttitudeEstimation_getRPY(attitudeEstimationHandle, attitudeRPY);
 
     Rocket.estimate.rpy[0] = attitudeRPY[0];

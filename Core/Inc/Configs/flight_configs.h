@@ -71,3 +71,12 @@
 #define DEFLECTION_MACH_STEP 0.1f  
 #define DEFLECTION_ANGLE_STEP 5.0f
 
+// ─── LKF ────────────────────────────────────────────────────────
+#define KF_SIGMA_ACCEL    3.0f   // m/s^2
+#define KF_BARO_VAR       1.0f   // m^2
+#define KF_BARO_GATE_MACH 0.7f
+#define KF_BARO_GATE_MAX_MS 1500U // never skip baro longer than this
+
+// ─── EKF ────────────────────────────────────────────────────────
+#define EKF_ACCEL_GRAVITY_TOL_MG 100.0f // pad only, accel used as gravity within this of 1 g
+#define EKF_GYRO_BIAS_ALPHA      0.02f  // pad gyro offset averaging, frozen at liftoff

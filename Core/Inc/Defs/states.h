@@ -43,6 +43,8 @@ typedef struct
     float temperature;
     bool baroHealthy; // false until the first good reading; false while readings are rejected
     uint32_t timestamp;
+    float accelRaw[3]; // unsmoothed -->  for the altitude KF
+    float gyroRaw[3];  // raw gyro for the EKF
 } RawSensorData_t;
 
 // ─── State Estimate ───────────────────────────────────────────────────────────

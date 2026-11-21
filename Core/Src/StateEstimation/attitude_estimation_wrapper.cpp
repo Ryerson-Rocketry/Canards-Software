@@ -43,6 +43,18 @@ void AttitudeEstimation_correct(AttitudeEstimationHandle handle,
     out_quaternion[3] = q[3];
 }
 
+void AttitudeEstimation_correctMagOnly(AttitudeEstimationHandle handle,
+                                       float mag_array[3],
+                                       float out_quaternion[4]) {
+    AttitudeEstimation* est = static_cast<AttitudeEstimation*>(handle);
+    float unusedAccel[3] = {0.0f, 0.0f, 1000.0f};
+    Eigen::Vector4f q = est->attitudeCorrection(unusedAccel, mag_array, false);
+    out_quaternion[0] = q[0];
+    out_quaternion[1] = q[1];
+    out_quaternion[2] = q[2];
+    out_quaternion[3] = q[3];
+}
+
 void AttitudeEstimation_getRPY(AttitudeEstimationHandle handle,
                                float out_rpy[3]) {
     AttitudeEstimation* est = static_cast<AttitudeEstimation*>(handle);
@@ -65,6 +77,12 @@ void AttitudeEstimation_getRPY(AttitudeEstimationHandle handle,
     out_rpy[2] = atan2f(2.0f*(qw*qz + qx*qy),
                         1.0f - 2.0f*(qy*qy + qz*qz))
                  * (180.0f / M_PI);
+
+    // Treat tiny values near zero as zero.
+    for (int i = 0; i < 3; ++i) {
+        if (fabsf(out_rpy[i]) < 0.0001f)
+            out_rpy[i] = 0.0f;
+    }
 }
 
 #ifdef __cplusplus

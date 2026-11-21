@@ -41,6 +41,11 @@ static float calculateMach(float pressure, float velocity)
     return velocity / c;
 }
 
+float servoGetMach(float pressure, float velocity)
+{
+    return calculateMach(pressure, velocity);
+}
+
 void servoUpdatePeakMach(float pressure, float velocity, float accel, uint32_t nowTick)
 {
   if (pastPeak)
