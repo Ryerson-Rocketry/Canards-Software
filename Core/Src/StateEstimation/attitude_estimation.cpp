@@ -104,10 +104,7 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
         mag_n[1] = mag_array[1]/mag_norm;
         mag_n[2] = mag_array[2]/mag_norm;
 
-        // First valid mag reading defines the world-frame field reference. The
-        // rocket is vertical on the pad and the quaternion is still ~identity, so
-        // body frame ~= world frame here -> this captures the TRUE field direction
-        // (including the local dip) instead of the hardcoded horizontal (1,0,0).
+        // Use the first valid reading as the local magnetic field reference.
         if (!magRefInitialized) {
             this->magReference = Eigen::Vector3f(mag_n[0], mag_n[1], mag_n[2]);
             this->magRefInitialized = true;
@@ -127,8 +124,7 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
     Eigen::Vector3f g(0.0f, 0.0f, 1.0f);
     Eigen::Vector3f r = this->magReference;
 
-    // Rotate a world-frame reference vector into the body frame.
-    // This is R(q)^T * v, using the quaternion conjugate.
+    // Predict how each reference vector appears in the sensor's body frame.
     auto worldToBody = [](const Eigen::Vector3f& v,
                           const Eigen::Vector4f& q) -> Eigen::Vector3f {
         float qw = q[0];
@@ -141,8 +137,7 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
     predicted.head<3>() = worldToBody(g, this->attitude);
     predicted.tail<3>() = worldToBody(r, this->attitude);
 
-    // Numerical measurement Jacobian. Central differences keep the quaternion
-    // convention explicit and avoid sign mistakes in an analytic Jacobian.
+    // Estimate how the predicted readings change with each quaternion component.
     Eigen::Matrix<float, 6, 4> H;
     const float eps = 1e-4f;
     for (int column = 0; column < 4; ++column) {
@@ -166,16 +161,16 @@ Eigen::Vector4f AttitudeEstimation::attitudeCorrection(float accel_array[3], flo
     Eigen::Matrix<float, 4, 6> K = stateErrorCov * H.transpose()
                                  * (H * stateErrorCov * H.transpose() + this->measurementNoiseCov).inverse();
 
-    // Innovation is measured minus predicted.
+    // Compare the sensor readings with the predicted readings.
     Eigen::Matrix<float, 6, 1> innovation = this->Z - predicted;
 
-    // State correction
+    // Use that difference to update the attitude estimate.
     this->attitude = this->attitude + K * innovation;
 
-    // Normalize quaternion to prevent drift
+    // Keep the quaternion at unit length.
     this->attitude.normalize();
 
-    // Covariance correction
+    // Update the uncertainty after applying the correction.
     this->stateErrorCov = (Eigen::Matrix4f::Identity() - K * H) * this->stateErrorCov;
 
     return this->attitude;
